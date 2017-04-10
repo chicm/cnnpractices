@@ -85,6 +85,10 @@ def gen_vgg_features(gen_train=False, gen_valid=False, gen_test=False):
         save_array(TEST_FEAT, conv_test_feat)
 
 def get_bn_layers(p):
+    model = get_vgg_model()
+    last_conv_idx = [i for i,l in enumerate(model.layers) if type(l) is Convolution2D] [-1]
+    conv_layers = model.layers[:last_conv_idx+1]
+
     return [
         MaxPooling2D(input_shape = conv_layers[-1].output_shape[1:]),
         Flatten(),
