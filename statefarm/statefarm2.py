@@ -46,7 +46,7 @@ def create_validation_data():
                 for k, g in drivers_ds[['subject', 'img']].groupby("subject")}
 
     #drivers = sorted(driver2imgs.keys())
-    drivers = driver2imgs.keys()
+    drivers = np.random.permutation(driver2imgs.keys())
     print drivers
 
     for i in range(4):
@@ -101,7 +101,7 @@ def show_conv():
     #print conv_model.summary()
 
 def get_bn_layers(p):
-    model = get_vgg_model()
+    model = get_keras_vgg_model()
     last_conv_idx = [i for i,l in enumerate(model.layers) if type(l) is Convolution2D] [-1]
     conv_layers = model.layers[:last_conv_idx+1]
 
@@ -140,7 +140,7 @@ def train_bn_layers():
     bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=8, 
                 validation_data=(conv_val_feat, val_labels))
 
-    bn_model.optimizer.lr = 0.001
+    bn_model.optimizer.lr = 0.0001
     bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=10, 
                 validation_data=(conv_val_feat, val_labels))
 
