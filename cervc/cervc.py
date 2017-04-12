@@ -24,6 +24,7 @@ VALID_DIR = DATA_DIR + '/valid'
 RESULT_DIR = DATA_DIR + '/results'
 
 TRAIN_FEAT = RESULT_DIR + '/train_feat.dat'
+DA_TRAIN_FEAT = RESULT_DIR + '/da_train_feat.dat'
 VAL_FEAT = RESULT_DIR + '/val_feat.dat'
 TEST_FEAT = RESULT_DIR + '/test_feat.dat'
 WEIGHTS_FILE = RESULT_DIR + '/sf_weights.h5'
@@ -69,6 +70,7 @@ def gen_vgg_features(gen_train=False, gen_valid=False, gen_test=False):
                 horizontal_flip=True, vertical_flip=True)
 
     da_batches = get_batches(TRAIN_DIR, gen_t,  batch_size = batch_size, shuffle=False)
+    batches = get_batches(TRAIN_DIR, batch_size = batch_size, shuffle=False)
     val_batches = get_batches(VALID_DIR, batch_size = batch_size, shuffle=False)
     test_batches = get_batches(TEST_DIR, batch_size = batch_size, shuffle=False)
 
@@ -80,8 +82,10 @@ def gen_vgg_features(gen_train=False, gen_valid=False, gen_test=False):
     conv_model = Sequential(conv_layers)
 
     if gen_train:
-        da_conv_feat = conv_model.predict_generator(da_batches, da_batches.nb_sample*15)
-        save_array(TRAIN_FEAT, da_conv_feat)
+        da_conv_feat = conv_model.predict_generator(da_batches, da_batches.nb_sample*10)
+        save_array(DA_TRAIN_FEAT, da_conv_feat)
+        conv_feat = conv_model.predict_generator(batches, batches.nb_sample)
+        save_array(TRAIN_FEAT, conv_feat)
     if gen_valid:
         conv_val_feat = conv_model.predict_generator(val_batches, val_batches.nb_sample)
         save_array(VAL_FEAT, conv_val_feat)
@@ -103,7 +107,7 @@ def show_conv():
     #conv_model = Sequential(conv_layers)
     #print conv_model.summary()
 
-def get_bn_layers(p):
+def get_bn_layers():
     model = get_vgg_model()
     last_conv_idx = [i for i,l in enumerate(model.layers) if type(l) is Convolution2D] [-1]
     conv_layers = model.layers[:last_conv_idx+1]
@@ -111,30 +115,32 @@ def get_bn_layers(p):
     return [
         MaxPooling2D(input_shape = conv_layers[-1].output_shape[1:]),
         Flatten(),
-        Dropout(p/2),
-        Dense(128, activation='relu'),
+        Dropout(0.5),
+        Dense(256, activation='relu'),
         BatchNormalization(),
-        Dropout(p/2),
-        Dense(128, activation='relu'),
+        Dropout(0.5),
+        Dense(256, activation='relu'),
         BatchNormalization(),
-        Dropout(p),
+        Dropout(0.6),
         Dense(3, activation='softmax')
     ]
 
 def get_bn_model():
-    p = 0.8
-    bn_model = Sequential(get_bn_layers(p))
+    bn_model = Sequential(get_bn_layers())
     bn_model.compile(Adam(lr=0.001), loss = 'categorical_crossentropy', metrics=['accuracy'])
     return bn_model
 
 def train_bn_layers():
     conv_val_feat = load_array(VAL_FEAT)
     print conv_val_feat.shape
-    da_conv_feat = load_array(TRAIN_FEAT)
+    da_conv_feat = load_array(DA_TRAIN_FEAT)
+    conv_feat = load_array(TRAIN_FEAT)
+    da_conv_feat = np.concatenate([da_conv_feat, conv_feat])
     print da_conv_feat.shape
+
     (val_classes, trn_classes, val_labels, trn_labels, val_filenames, trn_filenames, test_filenames) = get_classes(DATA_DIR+'/')
 
-    da_trn_labels = np.concatenate([trn_labels]*15)
+    da_trn_labels = np.concatenate([trn_labels]*11)
     print da_trn_labels.shape
 
     bn_model = get_bn_model()
