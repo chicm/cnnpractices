@@ -1,7 +1,7 @@
 #!/bin/sh
 
-#python statefarm2.py --mb
-#python statefarm2.py --createval
+#python cervc.py --mb
+#python cervc.py --createval
 python cervc.py --gentrainfeats
 python cervc.py --train
 python cervc.py --gentestfeats

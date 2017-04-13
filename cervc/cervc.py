@@ -17,7 +17,7 @@ from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 import argparse
 
-DATA_DIR = '/home/chicm/ml/cnnpractices/cervc/data'
+DATA_DIR = '/home/chicm/ml/cnnpractices/cervc/data/full'
 TRAIN_DIR = DATA_DIR+'/train'
 TEST_DIR = DATA_DIR + '/test'
 VALID_DIR = DATA_DIR + '/valid'
@@ -31,6 +31,7 @@ WEIGHTS_FILE = RESULT_DIR + '/sf_weights.h5'
 PREDICTS_FILE = RESULT_DIR + '/predicts'
 
 batch_size = 32
+da_multi = 1
 
 def do_clip(arr, mx): 
     return np.clip(arr, (1-mx)/2, mx)
@@ -49,7 +50,7 @@ def create_validation_data():
     files = np.random.permutation(files)
     print files[:10]
 
-    for i in range(150):
+    for i in range(600):
         fn = files[i]
         #print TRAIN_DIR+'/'+fn
         shutil.move(TRAIN_DIR+'/'+fn, VALID_DIR+'/'+fn)
@@ -65,9 +66,9 @@ def get_vgg_model():
     return get_my_vgg_model()
 
 def gen_vgg_features(gen_train=False, gen_valid=False, gen_test=False):
-    gen_t = image.ImageDataGenerator(rotation_range=180, height_shift_range=0.05,
-		shear_range=0.1, channel_shift_range=20, width_shift_range=0.1,
-                horizontal_flip=True, vertical_flip=True)
+    gen_t = image.ImageDataGenerator(rotation_range=180, height_shift_range=0.1,
+		shear_range=0.1, channel_shift_range=20, width_shift_range=0.1, horizontal_flip=True, 
+        vertical_flip=True)
 
     da_batches = get_batches(TRAIN_DIR, gen_t,  batch_size = batch_size, shuffle=False)
     batches = get_batches(TRAIN_DIR, batch_size = batch_size, shuffle=False)
@@ -82,7 +83,7 @@ def gen_vgg_features(gen_train=False, gen_valid=False, gen_test=False):
     conv_model = Sequential(conv_layers)
 
     if gen_train:
-        da_conv_feat = conv_model.predict_generator(da_batches, da_batches.nb_sample*10)
+        da_conv_feat = conv_model.predict_generator(da_batches, da_batches.nb_sample*da_multi)
         save_array(DA_TRAIN_FEAT, da_conv_feat)
         conv_feat = conv_model.predict_generator(batches, batches.nb_sample)
         save_array(TRAIN_FEAT, conv_feat)
@@ -121,7 +122,7 @@ def get_bn_layers():
         Dropout(0.5),
         Dense(256, activation='relu'),
         BatchNormalization(),
-        Dropout(0.6),
+        Dropout(0.8),
         Dense(3, activation='softmax')
     ]
 
@@ -140,16 +141,16 @@ def train_bn_layers():
 
     (val_classes, trn_classes, val_labels, trn_labels, val_filenames, trn_filenames, test_filenames) = get_classes(DATA_DIR+'/')
 
-    da_trn_labels = np.concatenate([trn_labels]*11)
+    da_trn_labels = np.concatenate([trn_labels]*(da_multi+1))
     print da_trn_labels.shape
 
     bn_model = get_bn_model()
     
-    bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=2, 
+    bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=10, 
              validation_data=(conv_val_feat, val_labels))
 
     bn_model.optimizer.lr = 0.01
-    bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=8, 
+    bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=10, 
                 validation_data=(conv_val_feat, val_labels))
 
     bn_model.optimizer.lr = 0.0001
@@ -180,7 +181,7 @@ def gen_submit(submit_filename, clip_percentage):
     submission.insert(0, 'image_name', [a[8:] for a in batches.filenames])
     #print [a for a in batches.filenames][:10]
     print submission.head()
-    submission.to_csv(subm_name, index=False, compression='gzip')
+    submission.to_csv(subm_name, index=False)
 
 
 parser = argparse.ArgumentParser()
