@@ -17,7 +17,12 @@ from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 import argparse
 
+FIRST_DATA_DIR = '/home/chicm/ml/cnnpractices/cervc/data/first'
+FIRST_TRAIN_DIR = '/home/chicm/ml/cnnpractices/cervc/data/first/train'
+ 
+
 DATA_DIR = '/home/chicm/ml/cnnpractices/cervc/data/full'
+
 TRAIN_DIR = DATA_DIR+'/train'
 TEST_DIR = DATA_DIR + '/test'
 VALID_DIR = DATA_DIR + '/valid'
@@ -30,8 +35,16 @@ TEST_FEAT = RESULT_DIR + '/test_feat.dat'
 WEIGHTS_FILE = RESULT_DIR + '/sf_weights.h5'
 PREDICTS_FILE = RESULT_DIR + '/predicts'
 
+FIRST_DA_TRAIN_FEAT = RESULT_DIR + '/first_da_train_feat.dat'
+FIRST_TRAIN_FEAT = RESULT_DIR + '/first_train_feat.dat'
+
+DA_LABEL = RESULT_DIR + '/da_label.dat'
+VAL_LABEL = RESULT_DIR + '/val_label.dat'
+FIRST_LABEL = RESULT_DIR + '/first_label.dat'
+
 batch_size = 32
-da_multi = 6
+da_multi = 5
+da_multi_first = 15
 
 def do_clip(arr, mx): 
     return np.clip(arr, (1-mx)/2, mx)
@@ -65,7 +78,7 @@ def get_keras_vgg_model():
 def get_vgg_model():
     return get_my_vgg_model()
 
-def gen_vgg_features(gen_train=False, gen_valid=False, gen_test=False):
+def gen_vgg_features(gen_train=False, gen_valid=False, gen_test=False, gen_first=False):
     gen_t = image.ImageDataGenerator(rotation_range=180, height_shift_range=0.1,
 		shear_range=0.1, channel_shift_range=20, width_shift_range=0.1, horizontal_flip=True, 
         vertical_flip=True)
@@ -81,6 +94,16 @@ def gen_vgg_features(gen_train=False, gen_valid=False, gen_test=False):
     conv_layers = model.layers[:last_conv_idx+1]
 
     conv_model = Sequential(conv_layers)
+
+    if gen_first:
+        first_batches = get_batches(FIRST_TRAIN_DIR, batch_size = batch_size, shuffle=False)
+        first_da_batches = get_batches(FIRST_TRAIN_DIR, gen_t,  batch_size = batch_size, shuffle=False)
+
+        first_da_conv_feat = conv_model.predict_generator(first_da_batches, first_da_batches.nb_sample*da_multi_first)
+        save_array(FIRST_DA_TRAIN_FEAT, first_da_conv_feat)
+        
+        first_conv_feat = conv_model.predict_generator(first_batches, first_batches.nb_sample)
+        save_array(FIRST_TRAIN_FEAT, first_conv_feat)
 
     if gen_train:
         da_conv_feat = conv_model.predict_generator(da_batches, da_batches.nb_sample*da_multi)
@@ -117,15 +140,15 @@ def get_bn_layers():
         MaxPooling2D(input_shape = conv_layers[-1].output_shape[1:]),
         Flatten(),
         Dropout(0.5),
-        Dense(200, activation='relu'),
+        Dense(256, activation='relu'),
         BatchNormalization(),
         Dropout(0.5),
-        Dense(200, activation='relu'),
+        Dense(256, activation='relu'),
+        BatchNormalization(),
+        Dropout(0.5),
+        Dense(256, activation='relu'),
         BatchNormalization(),
         Dropout(0.8),
-        #Dense(128, activation='relu'),
-        #BatchNormalization(),
-        #Dropout(0.7),
         Dense(3, activation='softmax')
     ]
 
@@ -135,38 +158,92 @@ def get_bn_model():
     return bn_model
 
 def train_bn_layers():
-    conv_val_feat = load_array(VAL_FEAT)
-    print conv_val_feat.shape
-    da_conv_feat = load_array(DA_TRAIN_FEAT)
-    conv_feat = load_array(TRAIN_FEAT)
-    da_conv_feat = np.concatenate([da_conv_feat, conv_feat])
-    print da_conv_feat.shape
+    conv_val_feat = bcolz.open(VAL_FEAT, mode='r')
+    val_labels = bcolz.open(VAL_LABEL, mode='r')
+
+    da_conv_feat = bcolz.open(DA_TRAIN_FEAT, mode='r')
+    first_da_feat = bcolz.open(FIRST_DA_TRAIN_FEAT, mode='r')
+    da_labels = bcolz.open(DA_LABEL, mode='r')
+    first_labels = bcolz.open(FIRST_LABEL, mode='r')
+    bs = da_conv_feat.chunklen*batch_size
+    print bs
+    batches = BcolzArrayIterator(da_conv_feat, da_labels, batch_size=bs, shuffle=False)
+    first_batches = BcolzArrayIterator(first_da_feat, first_labels, batch_size=bs, shuffle=False)
+    val_batches = BcolzArrayIterator(conv_val_feat, val_labels, batch_size=bs, shuffle=False)
+    
+    print val_batches.N
+    print batches.N
+    print first_batches.N
+    
+    new_batches = MixIterator([batches, first_batches])
+    N = batches.N + first_batches.N
+    print N
+
+    model = get_bn_model()
+    
+    #bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=10, 
+    #         validation_data=(conv_val_feat, val_labels))
+    #for i in range(10):
+    model.fit_generator(new_batches, samples_per_epoch=N, nb_epoch=10, validation_data=val_batches, nb_val_samples=val_batches.N)
+        #model.fit_generator(first_batches, samples_per_epoch=first_batches.N, nb_epoch=1, validation_data=val_batches, nb_val_samples=val_batches.N)
+
+    model.optimizer.lr = 0.01
+    #for i in range(10):
+    model.fit_generator(new_batches, samples_per_epoch=N, nb_epoch=10, validation_data=val_batches, nb_val_samples=val_batches.N)
+        #model.fit_generator(first_batches, samples_per_epoch=first_batches.N, nb_epoch=1, validation_data=val_batches, nb_val_samples=val_batches.N)
+
+    model.optimizer.lr = 0.00001
+    #for i in range(30):
+    model.fit_generator(batches, samples_per_epoch=N, nb_epoch=20, validation_data=val_batches, nb_val_samples=val_batches.N)
+        #model.fit_generator(first_batches, samples_per_epoch=first_batches.N, nb_epoch=1, validation_data=val_batches, nb_val_samples=val_batches.N)
+    model.save_weights(WEIGHTS_FILE)
+
+def save_labels():
+    first_batches = get_batches(FIRST_TRAIN_DIR, batch_size = batch_size, shuffle=False)
+    first_labels = onehot(first_batches.classes)
+    first_labels = np.concatenate([first_labels]*(da_multi_first)) 
+    save_array(FIRST_LABEL, first_labels)
 
     (val_classes, trn_classes, val_labels, trn_labels, val_filenames, trn_filenames, test_filenames) = get_classes(DATA_DIR+'/')
 
-    da_trn_labels = np.concatenate([trn_labels]*(da_multi+1))
-    print da_trn_labels.shape
+    da_trn_labels = np.concatenate([trn_labels]*(da_multi))
+    save_array(DA_LABEL, da_trn_labels)
+    save_array(VAL_LABEL, val_labels)   
+
+def train_bn_layers2():
+    conv_val_feat = load_array(VAL_FEAT)
+    print conv_val_feat.shape
+
+    first_da_conv_feat = load_array(FIRST_DA_TRAIN_FEAT)
+    first_conv_feat = load_array(FIRST_TRAIN_FEAT)
+    first_da_conv_feat = np.concatenate([first_da_conv_feat, first_conv_feat])    
+    
+    print first_da_conv_feat.shape
+
+    (val_classes, trn_classes, val_labels, trn_labels, val_filenames, trn_filenames, test_filenames) = get_classes(DATA_DIR+'/')
+
+    first_batches = get_batches(FIRST_TRAIN_DIR, batch_size = batch_size, shuffle=False)
+    first_labels = onehot(first_batches.classes)
+    first_labels = np.concatenate([first_labels]*(da_multi_first+1))
+    print first_labels.shape
+    
 
     bn_model = get_bn_model()
+    bn_model.load_weights(WEIGHTS_FILE)
     
-    bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=10, 
+    bn_model.fit(first_da_conv_feat, first_labels, batch_size=batch_size, nb_epoch=5, 
              validation_data=(conv_val_feat, val_labels))
 
     bn_model.optimizer.lr = 0.01
-    bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=10, 
-                validation_data=(conv_val_feat, val_labels))
+    bn_model.fit(first_da_conv_feat, first_labels, batch_size=batch_size, nb_epoch=5, 
+             validation_data=(conv_val_feat, val_labels))
 
-    bn_model.optimizer.lr = 0.0001
-    bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=100, 
-                validation_data=(conv_val_feat, val_labels))
-
-    bn_model.save_weights(WEIGHTS_FILE+'_stg1')
-    
     bn_model.optimizer.lr = 0.00001
-    bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=500, 
-                validation_data=(conv_val_feat, val_labels))
+    bn_model.fit(first_da_conv_feat, first_labels, batch_size=batch_size, nb_epoch=10, 
+             validation_data=(conv_val_feat, val_labels))
 
-    bn_model.save_weights(WEIGHTS_FILE)
+    bn_model.save_weights(WEIGHTS_FILE+'2')
+
 
 def save_predict():
     bn_model = get_bn_model()
@@ -199,12 +276,16 @@ parser.add_argument("--createval", action='store_true',
                     help="create validation data from training data")
 parser.add_argument("--gentestfeats", action='store_true',
                     help="generate vgg conv layers output array for test data")
+parser.add_argument("--genfirstfeats", action='store_true',
+                    help="generate vgg conv layers output array for first train data")
 parser.add_argument("--gentrainfeats", action='store_true',
                     help="generate vgg conv layers output array for train and validation data")
 parser.add_argument("--train", action='store_true', help="train dense layers")
+parser.add_argument("--train2", action='store_true', help="train dense layers")
 parser.add_argument("--predict", action='store_true', help="predict test data and save")
 parser.add_argument("--sub", nargs=2, help="generate submission file")
 parser.add_argument("--showconv", action='store_true', help="show summary of conv model")
+parser.add_argument("--savelabel", action='store_true', help="show summary of conv model")
 
 args = parser.parse_args()
 if args.mb:
@@ -223,10 +304,20 @@ if args.gentrainfeats:
     print 'generating train and val features...'
     gen_vgg_features(gen_train=True, gen_valid=True)
     print 'done'
+if args.genfirstfeats:
+    print 'generating train and val features...'
+    gen_vgg_features(gen_first=True)
+    print 'done'
 if args.train:
     print 'training dense layer...'
     train_bn_layers()
     print 'done'
+if args.train2:
+    print 'training dense layer...'
+    train_bn_layers2()
+    print 'done'
+if args.savelabel:
+    save_labels()
 if args.predict:
     print 'predicting test data...'
     save_predict()
