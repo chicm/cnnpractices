@@ -6,7 +6,7 @@ from keras.preprocessing import image
 from keras.utils.np_utils import to_categorical
 from keras.models import Sequential, Model
 from keras.layers.core import Flatten, Dense, Dropout, Lambda
-from keras.regularizers import l2, activity_l2, l1, activity_l1
+from keras.regularizers import l2, l1
 from keras.layers.normalization import BatchNormalization
 from keras.optimizers import SGD, RMSprop, Adam
 from keras.layers.convolutional import Convolution2D, MaxPooling2D, ZeroPadding2D
@@ -17,7 +17,7 @@ from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 import argparse
 
-DATA_DIR = '/home/chicm/ml/cnnpractices/cervc/data'
+DATA_DIR = '/home/chicm/ml/cnnpractices/cervc/data/first'
 TRAIN_DIR = DATA_DIR+'/train'
 TEST_DIR = DATA_DIR + '/test'
 VALID_DIR = DATA_DIR + '/valid'
@@ -46,7 +46,7 @@ def create_validation_data():
 
     #drivers = sorted(driver2imgs.keys())
     files = np.random.permutation(files)
-    print files[:10]
+    print(files[:10])
 
     for i in range(150):
         fn = files[i]
@@ -77,7 +77,7 @@ def create_model():
     model.compile(Adam(lr=0.001), loss = 'categorical_crossentropy', metrics=['accuracy'])
     for i in range(last_conv_idx+1):
         model.layers[i].trainable = False
-    print model.summary()
+    print(model.summary())
     return model
 
 def train():
@@ -91,20 +91,20 @@ def train():
     #est_batches = get_batches(TEST_DIR, batch_size = batch_size, shuffle=False)
 
     model = create_model()
-    model.fit_generator(da_batches, samples_per_epoch=da_batches.nb_sample*10, nb_epoch=2, 
-                        validation_data=val_batches, nb_val_samples=val_batches.nb_sample)
+    model.fit_generator(da_batches, samples_per_epoch=da_batches.samples*10, nb_epoch=2, 
+                        validation_data=val_batches, nb_val_samples=val_batches.samples)
     model.optimizer.lr = 0.01
-    model.fit_generator(da_batches, samples_per_epoch=da_batches.nb_sample*10, nb_epoch=10, 
-                        validation_data=val_batches, nb_val_samples=val_batches.nb_sample)
+    model.fit_generator(da_batches, samples_per_epoch=da_batches.samples*10, nb_epoch=10, 
+                        validation_data=val_batches, nb_val_samples=val_batches.samples)
     model.optimizer.lr = 0.00001
-    model.fit_generator(da_batches, samples_per_epoch=da_batches.nb_sample*10, nb_epoch=10, 
-                        validation_data=val_batches, nb_val_samples=val_batches.nb_sample)
+    model.fit_generator(da_batches, samples_per_epoch=da_batches.samples*10, nb_epoch=10, 
+                        validation_data=val_batches, nb_val_samples=val_batches.samples)
     
 
 
 def show_conv():
     model = create_model()
-    print model.summary()
+    print(model.summary())
     #model = get_vgg_model()
     #print model.summary()
     #bn_model = get_bn_model()
@@ -122,7 +122,7 @@ def save_predict():
 
 def gen_submit(submit_filename, clip_percentage):
     preds = load_array(PREDICTS_FILE)
-    print preds[:20]
+    print(preds[:20])
     subm = do_clip(preds, clip_percentage)
     subm_name = DATA_DIR+'/results/' + submit_filename
 
@@ -134,7 +134,7 @@ def gen_submit(submit_filename, clip_percentage):
     submission = pd.DataFrame(subm, columns=classes)
     submission.insert(0, 'image_name', [a[8:] for a in batches.filenames])
     #print [a for a in batches.filenames][:10]
-    print submission.head()
+    print(submission.head())
     submission.to_csv(subm_name, index=False, compression='gzip')
 
 
@@ -149,25 +149,25 @@ parser.add_argument("--showconv", action='store_true', help="show summary of con
 
 args = parser.parse_args()
 if args.mb:
-    print 'moving back...'
+    print('moving back...')
     move_validation_back()
-    print 'done'
+    print('done')
 if args.createval:
-    print 'creating val data...'
+    print('creating val data...')
     create_validation_data()
-    print 'done'
+    print('done')
 if args.train:
-    print 'training dense layer...'
+    print('training dense layer...')
     #train_bn_layers()
     train()
-    print 'done'
+    print('done')
 if args.predict:
-    print 'predicting test data...'
+    print('predicting test data...')
     save_predict()
-    print 'done'
+    print('done')
 if args.sub:
-    print 'generating submision file...'
+    print('generating submision file...')
     gen_submit(args.sub[0], (float)(args.sub[1]))
-    print 'done'
+    print('done')
 if args.showconv:
     show_conv()
