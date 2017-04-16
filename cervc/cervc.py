@@ -6,7 +6,7 @@ from keras.preprocessing import image
 from keras.utils.np_utils import to_categorical
 from keras.models import Sequential, Model
 from keras.layers.core import Flatten, Dense, Dropout, Lambda
-from keras.regularizers import l2, activity_l2, l1, activity_l1
+#from keras.regularizers import l2, activity_l2, l1, activity_l1
 from keras.layers.normalization import BatchNormalization
 from keras.optimizers import SGD, RMSprop, Adam
 from keras.layers.convolutional import Convolution2D, MaxPooling2D, ZeroPadding2D
@@ -16,6 +16,8 @@ from keras import applications
 from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 import argparse
+#from keras import backend as K
+#K.set_image_dim_ordering('th')
 
 DATA_DIR = '/home/chicm/ml/cnnpractices/cervc/data/full'
 TRAIN_DIR = DATA_DIR+'/train'
@@ -48,7 +50,7 @@ def create_validation_data():
 
     #drivers = sorted(driver2imgs.keys())
     files = np.random.permutation(files)
-    print files[:10]
+    print(files[:10])
 
     for i in range(600):
         fn = files[i]
@@ -61,6 +63,7 @@ def get_my_vgg_model():
     return model
 def get_keras_vgg_model():
     model = applications.VGG16(include_top=True, weights='imagenet')
+    #model = applications.VGG16(include_top=True, weights=None)
     return model
 def get_vgg_model():
     return get_my_vgg_model()
@@ -83,15 +86,15 @@ def gen_vgg_features(gen_train=False, gen_valid=False, gen_test=False):
     conv_model = Sequential(conv_layers)
 
     if gen_train:
-        da_conv_feat = conv_model.predict_generator(da_batches, da_batches.nb_sample*da_multi)
+        da_conv_feat = conv_model.predict_generator(da_batches, da_batches.samples*da_multi)
         save_array(DA_TRAIN_FEAT, da_conv_feat)
-        conv_feat = conv_model.predict_generator(batches, batches.nb_sample)
+        conv_feat = conv_model.predict_generator(batches, batches.samples)
         save_array(TRAIN_FEAT, conv_feat)
     if gen_valid:
-        conv_val_feat = conv_model.predict_generator(val_batches, val_batches.nb_sample)
+        conv_val_feat = conv_model.predict_generator(val_batches, val_batches.samples)
         save_array(VAL_FEAT, conv_val_feat)
     if gen_test:
-        conv_test_feat = conv_model.predict_generator(test_batches, test_batches.nb_sample)
+        conv_test_feat = conv_model.predict_generator(test_batches, test_batches.samples)
         save_array(TEST_FEAT, conv_test_feat)
 
 def get_conv_layers(model):
@@ -101,9 +104,9 @@ def get_conv_layers(model):
 
 def show_conv():
     model = get_vgg_model()
-    print model.summary()
+    print(model.summary())
     bn_model = get_bn_model()
-    print bn_model.summary()
+    print(bn_model.summary())
     #conv_layers = get_conv_layers(model)
     #conv_model = Sequential(conv_layers)
     #print conv_model.summary()
@@ -136,16 +139,16 @@ def get_bn_model():
 
 def train_bn_layers():
     conv_val_feat = load_array(VAL_FEAT)
-    print conv_val_feat.shape
+    print(conv_val_feat.shape)
     da_conv_feat = load_array(DA_TRAIN_FEAT)
     conv_feat = load_array(TRAIN_FEAT)
     da_conv_feat = np.concatenate([da_conv_feat, conv_feat])
-    print da_conv_feat.shape
+    print(da_conv_feat.shape)
 
     (val_classes, trn_classes, val_labels, trn_labels, val_filenames, trn_filenames, test_filenames) = get_classes(DATA_DIR+'/')
 
     da_trn_labels = np.concatenate([trn_labels]*(da_multi+1))
-    print da_trn_labels.shape
+    print(da_trn_labels.shape)
 
     bn_model = get_bn_model()
     
@@ -177,7 +180,7 @@ def save_predict():
 
 def gen_submit(submit_filename, clip_percentage):
     preds = load_array(PREDICTS_FILE)
-    print preds[:20]
+    print(preds[:20])
     subm = do_clip(preds, clip_percentage)
     subm_name = DATA_DIR+'/results/' + submit_filename
 
@@ -189,7 +192,7 @@ def gen_submit(submit_filename, clip_percentage):
     submission = pd.DataFrame(subm, columns=classes)
     submission.insert(0, 'image_name', [a[8:] for a in batches.filenames])
     #print [a for a in batches.filenames][:10]
-    print submission.head()
+    print(submission.head())
     submission.to_csv(subm_name, index=False)
 
 
@@ -208,32 +211,32 @@ parser.add_argument("--showconv", action='store_true', help="show summary of con
 
 args = parser.parse_args()
 if args.mb:
-    print 'moving back...'
+    print('moving back...')
     move_validation_back()
-    print 'done'
+    print('done')
 if args.createval:
-    print 'creating val data...'
+    print('creating val data...')
     create_validation_data()
-    print 'done'
+    print('done')
 if args.gentestfeats:
-    print 'generating test features...'
+    print('generating test features...')
     gen_vgg_features(gen_test=True)
-    print 'done'
+    print('done')
 if args.gentrainfeats:
-    print 'generating train and val features...'
+    print('generating train and val features...')
     gen_vgg_features(gen_train=True, gen_valid=True)
-    print 'done'
+    print('done')
 if args.train:
-    print 'training dense layer...'
+    print('training dense layer...')
     train_bn_layers()
-    print 'done'
+    print('done')
 if args.predict:
-    print 'predicting test data...'
+    print('predicting test data...')
     save_predict()
-    print 'done'
+    print('done')
 if args.sub:
-    print 'generating submision file...'
+    print('generating submision file...')
     gen_submit(args.sub[0], (float)(args.sub[1]))
-    print 'done'
+    print('done')
 if args.showconv:
     show_conv()
