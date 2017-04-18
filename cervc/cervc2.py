@@ -17,7 +17,7 @@ from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 import argparse
 
-DATA_DIR = '/home/chicm/ml/cnnpractices/cervc/data/first'
+DATA_DIR = '/home/chicm/ml/cnnpractices/cervc/data/sample'
 TRAIN_DIR = DATA_DIR+'/train'
 TEST_DIR = DATA_DIR + '/test'
 VALID_DIR = DATA_DIR + '/valid'
@@ -29,7 +29,7 @@ TEST_FEAT = RESULT_DIR + '/test_feat.dat'
 WEIGHTS_FILE = RESULT_DIR + '/sf_weights.h5'
 PREDICTS_FILE = RESULT_DIR + '/predicts'
 
-batch_size = 8
+batch_size = 32
 
 def do_clip(arr, mx): 
     return np.clip(arr, (1-mx)/2, mx)
@@ -86,7 +86,7 @@ def train():
 		shear_range=0.1, channel_shift_range=20, width_shift_range=0.1,
                 horizontal_flip=True, vertical_flip=True)
 
-    da_batches = get_batches(TRAIN_DIR, gen_t,  batch_size = batch_size, shuffle=False)
+    da_batches = get_batches(TRAIN_DIR, batch_size = batch_size, shuffle=False)
     val_batches = get_batches(VALID_DIR, batch_size = batch_size, shuffle=False)
     #est_batches = get_batches(TEST_DIR, batch_size = batch_size, shuffle=False)
 
