@@ -11,17 +11,17 @@ from keras.layers.normalization import BatchNormalization
 from keras.optimizers import SGD, RMSprop, Adam
 from keras.layers.convolutional import Convolution2D, MaxPooling2D, ZeroPadding2D
 from utils import *
-#from vgg16bn import *
-from keras import applications
+from resnet50 import *
+#from keras import applications
 from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 import argparse
 
-DATA_DIR = '/home/chicm/ml/cnnpractices/cervc/data/gray400'
+DATA_DIR = '/home/chicm/ml/cnnpractices/cervc/data/full640'
 TRAIN_DIR = DATA_DIR+'/train'
 TEST_DIR = DATA_DIR + '/test'
 VALID_DIR = DATA_DIR + '/valid'
-RESULT_DIR = DATA_DIR + '/results/myconv'
+RESULT_DIR = DATA_DIR + '/results'
 
 TRAIN_FEAT = RESULT_DIR + '/train_feat.dat'
 VAL_FEAT = RESULT_DIR + '/val_feat.dat'
@@ -29,104 +29,67 @@ TEST_FEAT = RESULT_DIR + '/test_feat.dat'
 WEIGHTS_FILE = RESULT_DIR + '/sf_weights.h5'
 PREDICTS_FILE = RESULT_DIR + '/predicts'
 
-batch_size = 32
+batch_size = 16
 
 def do_clip(arr, mx): 
     return np.clip(arr, (1-mx)/2, mx)
 
-def move_validation_back():
-    os.chdir(VALID_DIR)
-    files = glob('*/*.jpg')
-    for fn in files:
-        shutil.move(VALID_DIR+'/'+fn, TRAIN_DIR+'/'+fn)
-
-def create_validation_data():
-    os.chdir(TRAIN_DIR)
-    files = glob('*/*.jpg')
-
-    #drivers = sorted(driver2imgs.keys())
-    files = np.random.permutation(files)
-    print files[:10]
-
-    for i in range(150):
-        fn = files[i]
-        #print TRAIN_DIR+'/'+fn
-        shutil.move(TRAIN_DIR+'/'+fn, VALID_DIR+'/'+fn)
+def get_lrg_layers(conv_layers):
+    nf=128 
+    p=0.
+    return [
+        BatchNormalization(axis=1, input_shape=conv_layers[-1].output_shape[1:]),
+        Convolution2D(nf,3,3, activation='relu', border_mode='same'),
+        BatchNormalization(axis=1),
+        MaxPooling2D(),
+        Convolution2D(nf,3,3, activation='relu', border_mode='same'),
+        BatchNormalization(axis=1),
+        MaxPooling2D(),
+        Convolution2D(nf,3,3, activation='relu', border_mode='same'),
+        BatchNormalization(axis=1),
+        MaxPooling2D((1,2)),
+        Convolution2D(8,3,3, border_mode='same'),
+        Dropout(p),
+        GlobalAveragePooling2D(),
+        Activation('softmax')
+    ]
 
 def create_model():
-    conv_layers = [
-        BatchNormalization(axis=1, input_shape=(1,400,400)),
+    
+    resnet = Resnet50(size=(640,640), include_top=False)
+    conv_layers = resnet.model.layers
+    lrg_layers = get_lrg_layers(conv_layers)
+    conv_layers.extend(lrg_layers)
 
-        Convolution2D(16,3,3, activation='relu'),
-        BatchNormalization(axis=1),
-        Convolution2D(16,3,3, activation='relu'),
-        BatchNormalization(axis=1),
-        MaxPooling2D((2, 2), strides=(2, 2)),
-
-        Convolution2D(32,3,3, activation='relu'),
-        BatchNormalization(axis=1),
-        Convolution2D(32,3,3, activation='relu'),
-        BatchNormalization(axis=1),
-        MaxPooling2D((2, 2), strides=(2, 2)),
-
-        Convolution2D(64,3,3, activation='relu'),
-        BatchNormalization(axis=1),
-        Convolution2D(64,3,3, activation='relu'),
-        BatchNormalization(axis=1),
-        MaxPooling2D((2, 2), strides=(2, 2)),
-        
-        Convolution2D(64,3,3, activation='relu'),
-        BatchNormalization(axis=1),
-        MaxPooling2D((2, 2), strides=(2, 2)),        
-
-        Flatten(),
-        
-        Dropout(0.5),
-        Dense(128, activation='relu'),
-        BatchNormalization(),
-        Dropout(0.5),
-        Dense(128, activation='relu'),
-        BatchNormalization(),
-        Dropout(0.5),
-        Dense(128, activation='relu'),
-        BatchNormalization(),
-        Dropout(0.8),
-        Dense(3, activation='softmax')
-    ]
     #print conv_layers
     model = Sequential(conv_layers)
-    model.compile(Adam(), loss = 'categorical_crossentropy', metrics=['accuracy'])
-    
+    model.compile(Adam(lr=0.001), loss = 'categorical_crossentropy', metrics=['accuracy'])
+    for i in range(last_conv_idx+1):
+        model.layers[i].trainable = False
     print model.summary()
     return model
 
 def train():
     (val_classes, trn_classes, val_labels, trn_labels, val_filenames, trn_filenames, test_filenames) = get_classes(DATA_DIR+'/')
-    gen_t = image.ImageDataGenerator(rotation_range=180, height_shift_range=0.1,
+    gen_t = image.ImageDataGenerator(rotation_range=180, height_shift_range=0.05,
 		shear_range=0.1, channel_shift_range=20, width_shift_range=0.1,
                 horizontal_flip=True, vertical_flip=True)
 
-    #da_batches = get_batches(TRAIN_DIR, gen_t,  batch_size = batch_size, shuffle=False, target_size=(512,512))
-    batches = get_batches(TRAIN_DIR,  batch_size = batch_size, shuffle=True, target_size=(400,400), color_mode='grayscale')
-    val_batches = get_batches(VALID_DIR, batch_size = batch_size, shuffle=True, target_size=(400, 400), color_mode='grayscale')
-    #test_generator(batches)
-    #test_generator(val_batches)
+    da_batches = get_batches(TRAIN_DIR,  batch_size = batch_size, shuffle=True)
+    val_batches = get_batches(VALID_DIR, batch_size = batch_size, shuffle=True)
+    #est_batches = get_batches(TEST_DIR, batch_size = batch_size, shuffle=False)
+
     model = create_model()
-    model.fit_generator(batches, samples_per_epoch=batches.nb_sample, nb_epoch=2, 
+    model.fit_generator(da_batches, samples_per_epoch=da_batches.nb_sample, nb_epoch=2, 
                         validation_data=val_batches, nb_val_samples=val_batches.nb_sample)
     model.optimizer.lr = 0.01
-    model.fit_generator(batches, samples_per_epoch=batches.nb_sample, nb_epoch=10, 
+    model.fit_generator(da_batches, samples_per_epoch=da_batches.nb_sample, nb_epoch=10, 
                         validation_data=val_batches, nb_val_samples=val_batches.nb_sample)
     model.optimizer.lr = 0.00001
-    model.fit_generator(batches, samples_per_epoch=batches.nb_sample, nb_epoch=10, 
+    model.fit_generator(da_batches, samples_per_epoch=da_batches.nb_sample, nb_epoch=10, 
                         validation_data=val_batches, nb_val_samples=val_batches.nb_sample)
     
 
-def test_generator(batches):
-    i = 0
-    for img in batches:
-        i+=1
-        print i
 
 def show_conv():
     model = create_model()
@@ -150,7 +113,7 @@ def gen_submit(submit_filename, clip_percentage):
     preds = load_array(PREDICTS_FILE)
     print preds[:20]
     subm = do_clip(preds, clip_percentage)
-    subm_name = RESULT_DIR+'/' + submit_filename
+    subm_name = DATA_DIR+'/results/' + submit_filename
 
     trn_batches = get_batches(DATA_DIR+'/train', batch_size = batch_size)
     classes = sorted(trn_batches.class_indices, key=trn_batches.class_indices.get)
@@ -161,7 +124,7 @@ def gen_submit(submit_filename, clip_percentage):
     submission.insert(0, 'image_name', [a[8:] for a in batches.filenames])
     #print [a for a in batches.filenames][:10]
     print submission.head()
-    submission.to_csv(subm_name, index=False)
+    submission.to_csv(subm_name, index=False, compression='gzip')
 
 
 parser = argparse.ArgumentParser()

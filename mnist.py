@@ -155,9 +155,9 @@ def get_morden_conv_model():
         Convolution2D(64, 3, 3, activation='relu'),
         MaxPooling2D(),
 
-        #BatchNormalization(axis=1),
-        #Convolution2D(128, 3, 3, activation='relu'),
-        #MaxPooling2D(),
+        BatchNormalization(axis=1),
+        Convolution2D(128, 3, 3, activation='relu'),
+        MaxPooling2D(),
         
         Flatten(),
         BatchNormalization(axis=1),

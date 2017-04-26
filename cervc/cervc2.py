@@ -17,7 +17,7 @@ from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 import argparse
 
-DATA_DIR = '/home/chicm/ml/cnnpractices/cervc/data'
+DATA_DIR = '/home/chicm/ml/cnnpractices/cervc/data/orig400'
 TRAIN_DIR = DATA_DIR+'/train'
 TEST_DIR = DATA_DIR + '/test'
 VALID_DIR = DATA_DIR + '/valid'
@@ -29,7 +29,8 @@ TEST_FEAT = RESULT_DIR + '/test_feat.dat'
 WEIGHTS_FILE = RESULT_DIR + '/sf_weights.h5'
 PREDICTS_FILE = RESULT_DIR + '/predicts'
 
-batch_size = 8
+batch_size = 16
+da = 15
 
 def do_clip(arr, mx): 
     return np.clip(arr, (1-mx)/2, mx)
@@ -54,7 +55,7 @@ def create_validation_data():
         shutil.move(TRAIN_DIR+'/'+fn, VALID_DIR+'/'+fn)
 
 def create_model():
-    vgg = Vgg16BN()
+    vgg = Vgg16BN(size=(400,400))
     vggmodel = vgg.model
     last_conv_idx = [i for i,l in enumerate(vggmodel.layers) if type(l) is Convolution2D] [-1]
     conv_layers = vggmodel.layers[:last_conv_idx+1]
@@ -77,28 +78,34 @@ def create_model():
     model.compile(Adam(lr=0.001), loss = 'categorical_crossentropy', metrics=['accuracy'])
     for i in range(last_conv_idx+1):
         model.layers[i].trainable = False
-    print model.summary()
+    #print model.summary()
     return model
 
 def train():
     (val_classes, trn_classes, val_labels, trn_labels, val_filenames, trn_filenames, test_filenames) = get_classes(DATA_DIR+'/')
-    gen_t = image.ImageDataGenerator(rotation_range=180, height_shift_range=0.05,
-		shear_range=0.1, channel_shift_range=20, width_shift_range=0.1,
-                horizontal_flip=True, vertical_flip=True)
+    gen_t = image.ImageDataGenerator(rotation_range=90,  zoom_range=0.25, horizontal_flip=True )
 
-    da_batches = get_batches(TRAIN_DIR, gen_t,  batch_size = batch_size, shuffle=False)
-    val_batches = get_batches(VALID_DIR, batch_size = batch_size, shuffle=False)
+    da_batches = get_batches(TRAIN_DIR,  batch_size = batch_size, shuffle=True, target_size=(400,400))
+    val_batches = get_batches(VALID_DIR, batch_size = batch_size, shuffle=True, target_size=(400,400))
     #est_batches = get_batches(TEST_DIR, batch_size = batch_size, shuffle=False)
 
     model = create_model()
-    model.fit_generator(da_batches, samples_per_epoch=da_batches.nb_sample*10, nb_epoch=2, 
+    model.load_weights(WEIGHTS_FILE)
+    model.fit_generator(da_batches, samples_per_epoch=da_batches.nb_sample*da, nb_epoch=4, 
                         validation_data=val_batches, nb_val_samples=val_batches.nb_sample)
     model.optimizer.lr = 0.01
-    model.fit_generator(da_batches, samples_per_epoch=da_batches.nb_sample*10, nb_epoch=10, 
+    model.fit_generator(da_batches, samples_per_epoch=da_batches.nb_sample*da, nb_epoch=10, 
                         validation_data=val_batches, nb_val_samples=val_batches.nb_sample)
+    model.save_weights(WEIGHTS_FILE+'1')
+    model.optimizer.lr = 0.0001
+    model.fit_generator(da_batches, samples_per_epoch=da_batches.nb_sample*da, nb_epoch=10, 
+                        validation_data=val_batches, nb_val_samples=val_batches.nb_sample)
+    model.save_weights(WEIGHTS_FILE+'2')
     model.optimizer.lr = 0.00001
-    model.fit_generator(da_batches, samples_per_epoch=da_batches.nb_sample*10, nb_epoch=10, 
+    model.fit_generator(da_batches, samples_per_epoch=da_batches.nb_sample*da, nb_epoch=10, 
                         validation_data=val_batches, nb_val_samples=val_batches.nb_sample)
+
+    model.save_weights(WEIGHTS_FILE)
     
 
 

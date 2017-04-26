@@ -11,15 +11,16 @@ from keras.layers.normalization import BatchNormalization
 from keras.optimizers import SGD, RMSprop, Adam
 from keras.layers.convolutional import Convolution2D, MaxPooling2D, ZeroPadding2D
 from utils import *
-from vgg16bn import *
-from keras import applications
+#from vgg16bn import *
+#from keras import applications
+from resnet50 import *
 from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 import argparse
 
-DATA_DIR = '/home/chicm/data/cervc/full640'
+DATA_DIR = '/home/chicm/ml/cnnpractices/cervc/data/full640'
 TRAIN_DIR = DATA_DIR+'/train'
-TEST_DIR = DATA_DIR + '/test'
+TEST_DIR = '/home/chicm/ml/cnnpractices/cervc/data/full/test'
 VALID_DIR = DATA_DIR + '/valid'
 RESULT_DIR = DATA_DIR + '/results'
 
@@ -30,8 +31,9 @@ TEST_FEAT = RESULT_DIR + '/test_feat.dat'
 WEIGHTS_FILE = RESULT_DIR + '/sf_weights.h5'
 PREDICTS_FILE = RESULT_DIR + '/predicts'
 
-batch_size = 64
-da_multi = 10
+batch_size = 16
+#da_multi = 1
+img_size = (640,640)
 
 def do_clip(arr, mx): 
     return np.clip(arr, (1-mx)/2, mx)
@@ -55,145 +57,122 @@ def create_validation_data():
         #print TRAIN_DIR+'/'+fn
         shutil.move(TRAIN_DIR+'/'+fn, VALID_DIR+'/'+fn)
 
-def get_my_vgg_model():
-    vgg = Vgg16BN()
-    model = vgg.model
-    return model
-def get_keras_vgg_model():
-    model = applications.VGG16(include_top=True, weights='imagenet')
-    return model
-def get_vgg_model():
-    return get_my_vgg_model()
+def get_res_model():
+    resnet = Resnet50(size=(640,640), include_top=False)
+    return resnet.model
 
-def gen_vgg_features(gen_train=False, gen_valid=False, gen_test=False):
-    gen_t = image.ImageDataGenerator(height_shift_range=0.05,
+def gen_res_features(gen_train=False, gen_valid=False, gen_test=False):
+    gen_t = image.ImageDataGenerator(rotation_range=180, height_shift_range=0.1,
 		shear_range=0.1, channel_shift_range=20, width_shift_range=0.1, horizontal_flip=True, 
         vertical_flip=True)
 
-    da_batches = get_batches(TRAIN_DIR, gen_t,  batch_size = batch_size, shuffle=False)
-    batches = get_batches(TRAIN_DIR, batch_size = batch_size, shuffle=False)
-    val_batches = get_batches(VALID_DIR, batch_size = batch_size, shuffle=False)
-    test_batches = get_batches(TEST_DIR, batch_size = batch_size, shuffle=False)
+    #da_batches = get_batches(TRAIN_DIR, gen_t,  batch_size = batch_size, shuffle=False, target_size=img_size)
+    batches = get_batches(TRAIN_DIR, batch_size = batch_size, shuffle=False, target_size=img_size)
+    val_batches = get_batches(VALID_DIR, batch_size = batch_size, shuffle=False, target_size=img_size)
+    test_batches = get_batches(TEST_DIR, batch_size = batch_size, shuffle=False, target_size=img_size)
 
-    model = get_vgg_model()
-
-    last_conv_idx = [i for i,l in enumerate(model.layers) if type(l) is Convolution2D] [-1]
-    conv_layers = model.layers[:last_conv_idx+1]
-
-    conv_model = Sequential(conv_layers)
+    model = get_res_model()
 
     if gen_train:
-        da_conv_feat = conv_model.predict_generator(da_batches, da_batches.nb_sample*da_multi)
-        save_array(DA_TRAIN_FEAT, da_conv_feat)
-        conv_feat = conv_model.predict_generator(batches, batches.nb_sample)
+        #da_conv_feat = conv_model.predict_generator(da_batches, da_batches.nb_sample*da_multi)
+        #save_array(DA_TRAIN_FEAT, da_conv_feat)
+        conv_feat = model.predict_generator(batches, batches.nb_sample)
         save_array(TRAIN_FEAT, conv_feat)
     if gen_valid:
-        conv_val_feat = conv_model.predict_generator(val_batches, val_batches.nb_sample)
+        conv_val_feat = model.predict_generator(val_batches, val_batches.nb_sample)
         save_array(VAL_FEAT, conv_val_feat)
     if gen_test:
-        conv_test_feat = conv_model.predict_generator(test_batches, test_batches.nb_sample)
+        conv_test_feat = model.predict_generator(test_batches, test_batches.nb_sample)
         save_array(TEST_FEAT, conv_test_feat)
 
-def get_conv_layers(model):
-    last_conv_idx = [i for i,l in enumerate(model.layers) if type(l) is Convolution2D] [-1]
-    conv_layers = model.layers[:last_conv_idx+1]
-    return conv_layers
-
 def show_conv():
-    model = get_vgg_model()
+    model = get_res_model()
     print model.summary()
-    bn_model = get_bn_model()
-    print bn_model.summary()
+    lrn_model = get_lrn_model()
+    print lrn_model.summary()
     #conv_layers = get_conv_layers(model)
     #conv_model = Sequential(conv_layers)
     #print conv_model.summary()
 
-def get_bn_layers():
-    model = get_vgg_model()
-    last_conv_idx = [i for i,l in enumerate(model.layers) if type(l) is Convolution2D] [-1]
-    conv_layers = model.layers[:last_conv_idx+1]
-
+def get_lrn_layers():
+    conv_layers = get_res_model().layers
+    nf=128 
+    p=0.8
     return [
-        MaxPooling2D(input_shape = conv_layers[-1].output_shape[1:]),
-        Flatten(),
-        Dropout(0.5),
-        Dense(256, activation='relu'),
-        BatchNormalization(),
-        Dropout(0.5),
-        Dense(256, activation='relu'),
-        BatchNormalization(),
-        Dropout(0.8),
-        Dense(3, activation='softmax')
+        BatchNormalization(axis=1, input_shape=conv_layers[-1].output_shape[1:]),
+        Convolution2D(nf,3,3, activation='relu', border_mode='same'),
+        BatchNormalization(axis=1),
+        MaxPooling2D(),
+        Convolution2D(nf,3,3, activation='relu', border_mode='same'),
+        BatchNormalization(axis=1),
+        MaxPooling2D(),
+        Convolution2D(nf,3,3, activation='relu', border_mode='same'),
+        BatchNormalization(axis=1),
+        MaxPooling2D((1,2)),
+        Convolution2D(3,3,3, border_mode='same'),
+        Dropout(p),
+        GlobalAveragePooling2D(),
+        Activation('softmax')
     ]
 
-def get_bn_model():
-    bn_model = Sequential(get_bn_layers())
-    bn_model.compile(Adam(lr=0.001), loss = 'categorical_crossentropy', metrics=['accuracy'])
-    return bn_model
+def get_lrn_model():
+    lrn_model = Sequential(get_lrn_layers())
+    lrn_model.compile(Adam(lr=0.001), loss = 'categorical_crossentropy', metrics=['accuracy'])
+    return lrn_model
 
-def train_bn_layers():
+def train_lrn_layers():
     conv_val_feat = load_array(VAL_FEAT)
     print conv_val_feat.shape
-    da_conv_feat = load_array(DA_TRAIN_FEAT)
+    #da_conv_feat = load_array(DA_TRAIN_FEAT)
     conv_feat = load_array(TRAIN_FEAT)
-    da_conv_feat = np.concatenate([da_conv_feat, conv_feat])
-    print da_conv_feat.shape
+    #da_conv_feat = np.concatenate([da_conv_feat, conv_feat])
+    print conv_feat.shape
 
     (val_classes, trn_classes, val_labels, trn_labels, val_filenames, trn_filenames, test_filenames) = get_classes(DATA_DIR+'/')
 
-    da_trn_labels = np.concatenate([trn_labels]*(da_multi+1))
-    print da_trn_labels.shape
+    #da_trn_labels = np.concatenate([trn_labels]*(da_multi))
+    #da_trn_labels = trn_labels
+    print trn_labels.shape
 
-    bn_model = get_bn_model()
+    lrn_model = get_lrn_model()
+    batch_size = 128
     
-    bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=10, 
+    lrn_model.fit(conv_feat, trn_labels, batch_size=batch_size, nb_epoch=4, 
              validation_data=(conv_val_feat, val_labels))
 
-    bn_model.optimizer.lr = 0.01
-    bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=10, 
+    lrn_model.optimizer.lr = 0.01
+    lrn_model.fit(conv_feat, trn_labels, batch_size=batch_size, nb_epoch=4, 
                 validation_data=(conv_val_feat, val_labels))
 
-    bn_model.optimizer.lr = 0.0001
-    bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=10, 
+    lrn_model.optimizer.lr = 0.0001
+    lrn_model.fit(conv_feat, trn_labels, batch_size=batch_size, nb_epoch=10, 
                 validation_data=(conv_val_feat, val_labels))
 
-    bn_model.optimizer.lr = 0.00001
-    bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=50, 
+    lrn_model.save_weights(WEIGHTS_FILE+'_stg1')
+    
+    lrn_model.optimizer.lr = 0.00001
+    lrn_model.fit(conv_feat, trn_labels, batch_size=batch_size, nb_epoch=10, 
                 validation_data=(conv_val_feat, val_labels))
 
-    bn_model.save_weights(WEIGHTS_FILE)
-
-def ensemble():
-    preds = []
-    test_feat = load_array(TEST_FEAT)
-    for i in range(3):
-        model = get_bn_model()
-        fn = '{:s}/w{:d}.h5'.format(RESULT_DIR, i+1)
-        print fn
-        model.load_weights(fn)
-        preds.append(model.predict(test_feat, batch_size=batch_size))
-    print np.array(preds).shape
-    m = np.mean(preds, axis=0)
-    save_array(PREDICTS_FILE, m)
-        
+    lrn_model.save_weights(WEIGHTS_FILE)
 
 def save_predict():
-    bn_model = get_bn_model()
-    bn_model.load_weights(WEIGHTS_FILE)
+    lrn_model = get_lrn_model()
+    lrn_model.load_weights(WEIGHTS_FILE)
     conv_test_feat = load_array(TEST_FEAT)
-    preds = bn_model.predict(conv_test_feat, batch_size=batch_size)
+    preds = lrn_model.predict(conv_test_feat, batch_size=batch_size)
     save_array(PREDICTS_FILE, preds)
 
 def gen_submit(submit_filename, clip_percentage):
     preds = load_array(PREDICTS_FILE)
     print preds[:20]
     subm = do_clip(preds, clip_percentage)
-    subm_name = DATA_DIR+'/results/' + submit_filename
+    subm_name = RESULT_DIR + '/' + submit_filename
 
     trn_batches = get_batches(DATA_DIR+'/train', batch_size = batch_size)
     classes = sorted(trn_batches.class_indices, key=trn_batches.class_indices.get)
     #print classes
-    batches = get_batches(DATA_DIR+'/test', batch_size = batch_size, shuffle=False)
+    batches = get_batches(TEST_DIR, batch_size = batch_size, shuffle=False)
 
     submission = pd.DataFrame(subm, columns=classes)
     submission.insert(0, 'image_name', [a[8:] for a in batches.filenames])
@@ -214,7 +193,6 @@ parser.add_argument("--train", action='store_true', help="train dense layers")
 parser.add_argument("--predict", action='store_true', help="predict test data and save")
 parser.add_argument("--sub", nargs=2, help="generate submission file")
 parser.add_argument("--showconv", action='store_true', help="show summary of conv model")
-parser.add_argument("--ens", action='store_true', help="ensemble predict")
 
 args = parser.parse_args()
 if args.mb:
@@ -227,23 +205,19 @@ if args.createval:
     print 'done'
 if args.gentestfeats:
     print 'generating test features...'
-    gen_vgg_features(gen_test=True)
+    gen_res_features(gen_test=True)
     print 'done'
 if args.gentrainfeats:
     print 'generating train and val features...'
-    gen_vgg_features(gen_train=True, gen_valid=True)
+    gen_res_features(gen_train=True, gen_valid=True)
     print 'done'
 if args.train:
     print 'training dense layer...'
-    train_bn_layers()
+    train_lrn_layers()
     print 'done'
 if args.predict:
     print 'predicting test data...'
     save_predict()
-    print 'done'
-if args.ens:
-    print 'ensemble predicting...'
-    ensemble()
     print 'done'
 if args.sub:
     print 'generating submision file...'
