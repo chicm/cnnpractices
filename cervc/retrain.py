@@ -10,6 +10,7 @@ from keras.regularizers import l2, activity_l2, l1, activity_l1
 from keras.layers.normalization import BatchNormalization
 from keras.optimizers import SGD, RMSprop, Adam
 from keras.layers.convolutional import Convolution2D, MaxPooling2D, ZeroPadding2D
+from keras.callbacks import EarlyStopping, ModelCheckpoint
 from utils import *
 from vgg16bn import *
 from keras import applications
@@ -20,7 +21,7 @@ import random
 
 DATA_DIR = '/home/chicm/data/cervc/clean640'
 TRAIN_DIR = DATA_DIR+'/train'
-TEST_DIR = DATA_DIR + '/test'
+TEST_DIR = DATA_DIR + '/test2'
 VALID_DIR = DATA_DIR + '/valid'
 RESULT_DIR = DATA_DIR + '/results2'
 
@@ -141,24 +142,31 @@ def train_bn_layers():
     da_trn_labels = np.concatenate([trn_labels]*(da_multi+1))
     print da_trn_labels.shape
 
-    bn_model = get_bn_model()
-    
-    bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=10, 
-             validation_data=(conv_val_feat, val_labels))
-
-    bn_model.optimizer.lr = 0.01
-    bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=10, 
+    for i in range(5):
+        bn_model = get_bn_model()
+        
+        bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=10, 
                 validation_data=(conv_val_feat, val_labels))
 
-    #bn_model.optimizer.lr = 0.0001
-    #bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=10, 
-    #            validation_data=(conv_val_feat, val_labels))
+        K.set_value(bn_model.optimizer.lr, 0.01)
+        #bn_model.optimizer.lr = 0.01
+        bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=10, 
+                    validation_data=(conv_val_feat, val_labels))
 
-    bn_model.optimizer.lr = 0.00001
-    bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=50, 
-                validation_data=(conv_val_feat, val_labels))
+        #bn_model.optimizer.lr = 0.0001
+        #bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=10, 
+        #            validation_data=(conv_val_feat, val_labels))
+        kfold_weights_path = WEIGHTS_FILE+str(random.random())
+        callbacks = [
+                EarlyStopping(monitor='val_loss', patience=40, verbose=0),
+                ModelCheckpoint(kfold_weights_path, monitor='val_loss', save_best_only=True, verbose=0)]
 
-    bn_model.save_weights(WEIGHTS_FILE+str(random.random()))
+        #bn_model.optimizer.lr = 0.00001
+        K.set_value(bn_model.optimizer.lr, 0.00001)
+        bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=300, 
+                    validation_data=(conv_val_feat, val_labels), callbacks=callbacks)
+
+    #bn_model.save_weights(WEIGHTS_FILE+str(random.random()))
 
 def ensemble():
     preds = []

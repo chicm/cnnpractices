@@ -17,9 +17,9 @@ from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 import argparse
 
-DATA_DIR = '/home/chicm/ml/cnnpractices/cervc/data/gray400'
+DATA_DIR = '/home/chicm/data/cervc/clean640'
 TRAIN_DIR = DATA_DIR+'/train'
-TEST_DIR = DATA_DIR + '/test'
+TEST_DIR = DATA_DIR + '/test2'
 VALID_DIR = DATA_DIR + '/valid'
 RESULT_DIR = DATA_DIR + '/results/myconv'
 
@@ -29,7 +29,8 @@ TEST_FEAT = RESULT_DIR + '/test_feat.dat'
 WEIGHTS_FILE = RESULT_DIR + '/sf_weights.h5'
 PREDICTS_FILE = RESULT_DIR + '/predicts'
 
-batch_size = 32
+batch_size = 128
+img_size=(128,128)
 
 def do_clip(arr, mx): 
     return np.clip(arr, (1-mx)/2, mx)
@@ -53,44 +54,41 @@ def create_validation_data():
         #print TRAIN_DIR+'/'+fn
         shutil.move(TRAIN_DIR+'/'+fn, VALID_DIR+'/'+fn)
 
+vgg_mean = np.array([123.68, 116.779, 103.939], dtype=np.float32).reshape((3,1,1))
+def vgg_preprocess(x):
+    x = x - vgg_mean
+    return x[:, ::-1] # reverse axis rgb->bgr
+
 def create_model():
     conv_layers = [
-        BatchNormalization(axis=1, input_shape=(1,400,400)),
+        Lambda(vgg_preprocess, input_shape=(3,)+img_size, output_shape=(3,)+img_size),
+        #BatchNormalization(axis=1, input_shape=(3,128,128)),
 
-        Convolution2D(16,3,3, activation='relu'),
-        BatchNormalization(axis=1),
-        Convolution2D(16,3,3, activation='relu'),
+        Convolution2D(24,3,3, activation='relu'),
         BatchNormalization(axis=1),
         MaxPooling2D((2, 2), strides=(2, 2)),
 
-        Convolution2D(32,3,3, activation='relu'),
-        BatchNormalization(axis=1),
-        Convolution2D(32,3,3, activation='relu'),
+        Convolution2D(24,3,3, activation='relu'),
         BatchNormalization(axis=1),
         MaxPooling2D((2, 2), strides=(2, 2)),
 
-        Convolution2D(64,3,3, activation='relu'),
+        Convolution2D(48,3,3, activation='relu'),
         BatchNormalization(axis=1),
-        Convolution2D(64,3,3, activation='relu'),
+        MaxPooling2D((2, 2), strides=(2, 2)),
+
+        Convolution2D(48,3,3, activation='relu'),
         BatchNormalization(axis=1),
         MaxPooling2D((2, 2), strides=(2, 2)),
         
-        Convolution2D(64,3,3, activation='relu'),
-        BatchNormalization(axis=1),
-        MaxPooling2D((2, 2), strides=(2, 2)),        
-
         Flatten(),
         
-        Dropout(0.5),
+        Dropout(0.25),
         Dense(128, activation='relu'),
         BatchNormalization(),
         Dropout(0.5),
         Dense(128, activation='relu'),
         BatchNormalization(),
         Dropout(0.5),
-        Dense(128, activation='relu'),
-        BatchNormalization(),
-        Dropout(0.8),
         Dense(3, activation='softmax')
     ]
     #print conv_layers
@@ -102,17 +100,17 @@ def create_model():
 
 def train():
     (val_classes, trn_classes, val_labels, trn_labels, val_filenames, trn_filenames, test_filenames) = get_classes(DATA_DIR+'/')
-    gen_t = image.ImageDataGenerator(rotation_range=180, height_shift_range=0.1,
+    gen_t = image.ImageDataGenerator(rotation_range=45, height_shift_range=0.1,
 		shear_range=0.1, channel_shift_range=20, width_shift_range=0.1,
                 horizontal_flip=True, vertical_flip=True)
 
     #da_batches = get_batches(TRAIN_DIR, gen_t,  batch_size = batch_size, shuffle=False, target_size=(512,512))
-    batches = get_batches(TRAIN_DIR,  batch_size = batch_size, shuffle=True, target_size=(400,400), color_mode='grayscale')
-    val_batches = get_batches(VALID_DIR, batch_size = batch_size, shuffle=True, target_size=(400, 400), color_mode='grayscale')
+    batches = get_batches(TRAIN_DIR,  batch_size = batch_size, shuffle=True, target_size=img_size)
+    val_batches = get_batches(VALID_DIR, batch_size = batch_size, shuffle=True, target_size=img_size)
     #test_generator(batches)
     #test_generator(val_batches)
     model = create_model()
-    model.fit_generator(batches, samples_per_epoch=batches.nb_sample, nb_epoch=2, 
+    model.fit_generator(batches, samples_per_epoch=batches.nb_sample, nb_epoch=5, 
                         validation_data=val_batches, nb_val_samples=val_batches.nb_sample)
     model.optimizer.lr = 0.01
     model.fit_generator(batches, samples_per_epoch=batches.nb_sample, nb_epoch=10, 
