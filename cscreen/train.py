@@ -42,7 +42,7 @@ data_transforms = {
         transforms.RandomHorizontalFlip(),
         #transforms.Lambda(lambda x: randomFlip(x)),
         #transforms.Lambda(lambda x: randomTranspose(x)),
-        transforms.Lambda(lambda x: randomRotate(x)),
+        #transforms.Lambda(lambda x: randomRotate(x)),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ]),
@@ -202,7 +202,7 @@ def train(model, w_file):
     # Observe that all parameters are being optimized
     optimizer_ft = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 
-    model = train_model(model, criterion, optimizer_ft, w_file, lr_scheduler, init_lr=0.0001, 
+    model = train_model(model, criterion, optimizer_ft, w_file, lr_scheduler, init_lr=0.001, 
                         num_epochs=epochs)
     return model
 
