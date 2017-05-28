@@ -19,11 +19,11 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 import argparse
 import random
 
-DATA_DIR = '/home/chicm/data/cervc/clean640'
+DATA_DIR = '/home/chicm/ml/cnnpractices/cervc/data/crop'
 TRAIN_DIR = DATA_DIR+'/train'
-TEST_DIR = DATA_DIR + '/test2'
+TEST_DIR = DATA_DIR + '/test'
 VALID_DIR = DATA_DIR + '/valid'
-RESULT_DIR = DATA_DIR + '/results2'
+RESULT_DIR = DATA_DIR + '/results'
 
 TRAIN_FEAT = RESULT_DIR + '/train_feat.dat'
 DA_TRAIN_FEAT = RESULT_DIR + '/da_train_feat.dat'
@@ -163,7 +163,7 @@ def train_bn_layers():
 
         #bn_model.optimizer.lr = 0.00001
         K.set_value(bn_model.optimizer.lr, 0.00001)
-        bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=300, 
+        bn_model.fit(da_conv_feat, da_trn_labels, batch_size=batch_size, nb_epoch=150, 
                     validation_data=(conv_val_feat, val_labels), callbacks=callbacks)
 
     #bn_model.save_weights(WEIGHTS_FILE+str(random.random()))
