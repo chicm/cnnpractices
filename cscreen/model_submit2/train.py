@@ -20,7 +20,8 @@ import random
 from PIL import Image
 
 from utils import save_array, load_array
-from utils import create_dense161, create_dense201, create_res101, create_res152
+from utils import create_dense161, create_dense201, create_res101, create_res152, create_dense169, create_res50
+from utils import create_vgg19bn, create_vgg19, create_vgg16
 
 data_dir = settings.DATA_DIR
 
@@ -140,22 +141,24 @@ def lr_scheduler(optimizer, epoch, init_lr=0.001, lr_decay_epoch=7):
 
     return optimizer    
 
-def train(model, w_file):
+def train(model, w_file, init_lr = 0.001):
     criterion = nn.CrossEntropyLoss()
     # Observe that all parameters are being optimized
-    optimizer_ft = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+    optimizer_ft = optim.SGD(model.parameters(), lr=init_lr, momentum=0.9)
 
-    model = train_model(model, criterion, optimizer_ft, w_file, lr_scheduler, init_lr=0.001, 
+    model = train_model(model, criterion, optimizer_ft, w_file, lr_scheduler, init_lr=init_lr, 
                         num_epochs=epochs)
     return model
 
-def create_models():
-    models = []
-    models.append(create_dense201())
-    models.append(create_dense161())
-    models.append(create_res101())
-    models.append(create_res152())
-    return models
+def train_res50():
+    print('training resnet 50')
+    model, w_file = create_res50()
+    try:
+        model.load_state_dict(torch.load(w_file))
+    except:
+        print('{} not found, continue'.format(w_file))
+        pass
+    train(model, w_file)
 
 def train_res101():
     print('training resnet 101')
@@ -189,10 +192,49 @@ def train_dense161():
         pass
     train(model, w_file)
 
+def train_dense169():
+    print('training densenet 169')
+    model, w_file = create_dense169()
+    try:
+        model.load_state_dict(torch.load(w_file))
+    except:
+        print('{} not found, continue'.format(w_file))
+        pass
+    train(model, w_file)
 
 def train_dense201():
     print('training densenet 201')
     model, w_file = create_dense201()
+    try:
+        model.load_state_dict(torch.load(w_file))
+    except:
+        print('{} not found, continue'.format(w_file))
+        pass
+    train(model, w_file)
+
+def train_vgg19bn():
+    print('training vgg19bn')
+    model, w_file = create_vgg19bn()
+    try:
+        model.load_state_dict(torch.load(w_file))
+    except:
+        print('{} not found, continue'.format(w_file))
+        pass
+    train(model, w_file)
+
+def train_vgg19():
+    print('training vgg19')
+    model, w_file = create_vgg19()
+    try:
+        model.load_state_dict(torch.load(w_file))
+    except:
+        print('{} not found, continue'.format(w_file))
+        pass
+    train(model, w_file)
+
+def train_vgg16():
+    print('training vgg16')
+    model, w_file = create_vgg16()
     try:
         model.load_state_dict(torch.load(w_file))
     except:
@@ -221,6 +263,16 @@ if args.train:
         train_res101()
     elif mname == 'res152':
         train_res152()
+    elif mname == 'dense169':
+        train_dense169()
+    elif mname == 'res50':
+        train_res50()
+    elif mname == 'vgg19bn':
+        train_vgg19bn()
+    elif mname == 'vgg19':
+        train_vgg19()
+    elif mname == 'vgg16':
+        train_vgg16()
     elif mname == 'all':
         train_all()
     else:

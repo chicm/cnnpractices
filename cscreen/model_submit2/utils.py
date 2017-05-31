@@ -29,7 +29,19 @@ def load_array(fname):
 
 def load_weights_file(model, w_file):
     model.load_state_dict(torch.load(w_file))
-    
+
+def create_res50(load_weights=False):
+    model_ft = models.resnet50(pretrained=True)
+    num_ftrs = model_ft.fc.in_features
+    model_ft.fc = nn.Linear(num_ftrs, 3)
+    model_ft = model_ft.cuda()
+
+    w_file = MODEL_DIR + '/res50.pth'
+    if load_weights:
+        load_weights_file(model_ft, w_file)
+
+    return model_ft, w_file
+
 def create_res101(load_weights=False):
     model_ft = models.resnet101(pretrained=True)
     num_ftrs = model_ft.fc.in_features
@@ -65,6 +77,19 @@ def create_dense161(load_weights=False):
         load_weights_file(desnet_ft, w_file)
     return desnet_ft, w_file
 
+def create_dense169(load_weights=False):
+    desnet_ft = models.densenet169(pretrained=True)
+    num_ftrs = desnet_ft.classifier.in_features
+    desnet_ft.classifier = nn.Linear(num_ftrs, 3)
+    print(num_ftrs)
+    desnet_ft = desnet_ft.cuda()
+    w_file = MODEL_DIR + '/dense169.pth'
+
+    if load_weights:
+        load_weights_file(desnet_ft, w_file)
+
+    return desnet_ft, w_file
+
 def create_dense201(load_weights=False):
     desnet_ft = models.densenet201(pretrained=True)
     num_ftrs = desnet_ft.classifier.in_features
@@ -77,3 +102,49 @@ def create_dense201(load_weights=False):
         load_weights_file(desnet_ft, w_file)
 
     return desnet_ft, w_file
+
+def create_vgg19bn(load_weights=False):
+    vgg19_bn_ft = models.vgg19_bn(num_classes=3).cuda()
+    w_file = MODEL_DIR + '/vgg19bn.pth'
+
+    if load_weights:
+        load_weights_file(vgg19_bn_ft, w_file)
+    return vgg19_bn_ft, w_file
+
+def create_vgg19(load_weights=False):
+    vgg19_ft = models.vgg19(pretrained=True)
+    vgg19_ft.classifier = nn.Sequential(
+            nn.Linear(512 * 7 * 7, 4096),
+            nn.ReLU(True),
+            nn.Dropout(),
+            nn.Linear(4096, 4096),
+            nn.ReLU(True),
+            nn.Dropout(),
+            nn.Linear(4096, 3))
+    vgg19_ft = vgg19_ft.cuda()
+
+    w_file = MODEL_DIR + '/vgg19.pth'
+
+    if load_weights:
+        load_weights_file(vgg19_ft, w_file)
+
+    return vgg19_ft, w_file
+
+def create_vgg16(load_weights=False):
+    vgg16_ft = models.vgg16(pretrained=True)
+    vgg16_ft.classifier = nn.Sequential(
+            nn.Linear(512 * 7 * 7, 4096),
+            nn.ReLU(True),
+            nn.Dropout(),
+            nn.Linear(4096, 4096),
+            nn.ReLU(True),
+            nn.Dropout(),
+            nn.Linear(4096, 3))
+    vgg16_ft = vgg16_ft.cuda()
+
+    w_file = MODEL_DIR + '/vgg16.pth'
+
+    if load_weights:
+        load_weights_file(vgg16_ft, w_file)
+
+    return vgg16_ft, w_file
