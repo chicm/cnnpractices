@@ -21,17 +21,19 @@ from PIL import Image
 
 from utils import save_array, load_array
 from utils import create_dense161, create_dense201, create_res101, create_res152, create_dense169, create_res50
-from utils import create_vgg19bn, create_vgg19, create_vgg16
+from utils import create_vgg19bn, create_vgg19, create_vgg16, create_inceptionv3
 
 data_dir = settings.DATA_DIR
 
 RESULT_DIR = data_dir + '/results'
 CLASSES_FILE = RESULT_DIR + '/train_classes.dat'
+MODEL_DIR = settings.MODEL_PATH
 batch_size = 16
 epochs = 100
 
 data_transforms = {
     'train': transforms.Compose([
+        #transforms.Scale(320), # for vgg19
         transforms.RandomSizedCrop(224),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
@@ -50,23 +52,73 @@ dsets = {x: datasets.ImageFolder(os.path.join(data_dir, x), data_transforms[x])
 dset_loaders = {x: torch.utils.data.DataLoader(dsets[x], batch_size=batch_size,
                                                shuffle=True, num_workers=4)
                 for x in ['train', 'valid']}
+
+data_transforms_v3 = {
+    'train': transforms.Compose([
+        #transforms.Scale(320), # for vgg19
+        transforms.RandomSizedCrop(299),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ]),
+    'valid': transforms.Compose([
+        transforms.Scale(320),
+        transforms.CenterCrop(299),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
+}
+
+dsets_v3 = {x: datasets.ImageFolder(os.path.join(data_dir, x), data_transforms_v3[x])
+         for x in ['train', 'valid']}
+dset_loaders_v3 = {x: torch.utils.data.DataLoader(dsets_v3[x], batch_size=batch_size,
+                                               shuffle=True, num_workers=4)
+                for x in ['train', 'valid']}
+
+
 dset_sizes = {x: len(dsets[x]) for x in ['train', 'valid']}
 dset_classes = dsets['train'].classes
 save_array(CLASSES_FILE, dset_classes)
 
 use_gpu = torch.cuda.is_available()
 
-def train_model(model, criterion, optimizer, w_file, lr_scheduler, init_lr=0.001, num_epochs=25):
+w_files_training = []
+
+def save_weights(acc, model, epoch, max_num=3):
+    f_name = '{}_{}_{:.5f}.pth'.format(model.name, epoch, acc)
+    w_file_path = os.path.join(MODEL_DIR, f_name)
+    if len(w_files_training) < max_num:
+        w_files_training.append((acc, w_file_path))
+        torch.save(model.state_dict(), w_file_path)
+        return
+    min = 10.0
+    index_min = -1
+    for i, item in enumerate(w_files_training):
+        val_acc, fp = item
+        if min > val_acc:
+            index_min = i
+            min = val_acc
+    #print(min)
+    if acc > min:
+        torch.save(model.state_dict(), w_file_path)
+        os.remove(w_files_training[index_min][1])
+        w_files_training[index_min] = (acc, w_file_path)
+
+def train_model(model, criterion, optimizer, w_file, lr_scheduler, max_num = 3, init_lr=0.001, num_epochs=25):
     since = time.time()
 
     best_model = model
     best_acc = 0.0
-
+    loader = dset_loaders
+    if model.name == 'inceptionv3':
+        print('V3---')
+        loader = dset_loaders_v3
+    
     for epoch in range(num_epochs):
         epoch_since = time.time()
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
         print('-' * 10)
-
+        
         # Each epoch has a training and validation phase
         for phase in ['train', 'valid']:
             if phase == 'train':
@@ -79,7 +131,7 @@ def train_model(model, criterion, optimizer, w_file, lr_scheduler, init_lr=0.001
             running_corrects = 0
 
             # Iterate over data.
-            for data in dset_loaders[phase]:
+            for data in loader[phase]:
                 # get the inputs
                 inputs, labels = data
                 #print(labels)
@@ -115,11 +167,12 @@ def train_model(model, criterion, optimizer, w_file, lr_scheduler, init_lr=0.001
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(
                 phase, epoch_loss, epoch_acc))
 
-            # deep copy the model
+            if phase == 'valid':
+                save_weights(epoch_acc, model, epoch, max_num=max_num)
             if phase == 'valid' and epoch_acc > best_acc:
                 best_acc = epoch_acc
-                best_model = copy.deepcopy(model)
-                torch.save(best_model.state_dict(), w_file)
+                #best_model = copy.deepcopy(model)
+                #torch.save(best_model.state_dict(), w_file)
 
         print('epoch {}: {:.0f}s'.format(epoch, time.time()-epoch_since))
 
@@ -127,6 +180,7 @@ def train_model(model, criterion, optimizer, w_file, lr_scheduler, init_lr=0.001
     print('Training complete in {:.0f}m {:.0f}s'.format(
         time_elapsed // 60, time_elapsed % 60))
     print('Best val Acc: {:4f}'.format(best_acc))
+    print(w_files_training)
     return best_model
 
 def lr_scheduler(optimizer, epoch, init_lr=0.001, lr_decay_epoch=7):
@@ -137,17 +191,30 @@ def lr_scheduler(optimizer, epoch, init_lr=0.001, lr_decay_epoch=7):
         print('LR is set to {}'.format(lr))
 
     for param_group in optimizer.param_groups:
+        print('existing lr = {}'.format(param_group['lr']))
         param_group['lr'] = lr
+    return optimizer  
 
+def cyc_lr_scheduler(optimizer, epoch, init_lr=0.001, lr_decay_epoch=1):
+    lr = 0
+    for param_group in optimizer.param_groups:
+        lr = param_group['lr']
+    if epoch % lr_decay_epoch == 0 and epoch >= lr_decay_epoch:
+        lr = lr * 0.6
+    if lr < 5e-6:
+        lr = 0.0001
+    print('LR is set to {}'.format(lr))
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
     return optimizer    
 
-def train(model, w_file, init_lr = 0.001):
+def train(model, w_file, init_lr = 0.001, num_epochs = epochs, max_num = 3):
     criterion = nn.CrossEntropyLoss()
     # Observe that all parameters are being optimized
     optimizer_ft = optim.SGD(model.parameters(), lr=init_lr, momentum=0.9)
 
-    model = train_model(model, criterion, optimizer_ft, w_file, lr_scheduler, init_lr=init_lr, 
-                        num_epochs=epochs)
+    model = train_model(model, criterion, optimizer_ft, w_file, cyc_lr_scheduler, init_lr=init_lr, 
+                        num_epochs=num_epochs, max_num = max_num)
     return model
 
 def train_res50():
@@ -168,7 +235,7 @@ def train_res101():
     except:
         print('{} not found, continue'.format(w_file))
         pass
-    train(model, w_file)
+    train(model, w_file, max_num=4)
 
 
 def train_res152():
@@ -179,7 +246,7 @@ def train_res152():
     except:
         print('{} not found, continue'.format(w_file))
         pass
-    train(model, w_file)
+    train(model, w_file, max_num=4)
 
 
 def train_dense161():
@@ -190,7 +257,7 @@ def train_dense161():
     except:
         print('{} not found, continue'.format(w_file))
         pass
-    train(model, w_file)
+    train(model, w_file, max_num=4)
 
 def train_dense169():
     print('training densenet 169')
@@ -210,7 +277,7 @@ def train_dense201():
     except:
         print('{} not found, continue'.format(w_file))
         pass
-    train(model, w_file)
+    train(model, w_file, max_num = 4)
 
 def train_vgg19bn():
     print('training vgg19bn')
@@ -230,11 +297,21 @@ def train_vgg19():
     except:
         print('{} not found, continue'.format(w_file))
         pass
-    train(model, w_file)
+    train(model, w_file, num_epochs = 120)
 
 def train_vgg16():
     print('training vgg16')
     model, w_file = create_vgg16()
+    try:
+        model.load_state_dict(torch.load(w_file))
+    except:
+        print('{} not found, continue'.format(w_file))
+        pass
+    train(model, w_file)
+
+def train_inception_v3():
+    print('training inception_v3')
+    model, w_file = create_inceptionv3()
     try:
         model.load_state_dict(torch.load(w_file))
     except:
@@ -273,6 +350,8 @@ if args.train:
         train_vgg19()
     elif mname == 'vgg16':
         train_vgg16()
+    elif mname == 'inceptionv3':
+        train_inception_v3()
     elif mname == 'all':
         train_all()
     else:

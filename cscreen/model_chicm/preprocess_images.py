@@ -2,7 +2,9 @@ import settings
 import os, shutil, glob, sys, cv2
 import numpy as np
 
-NEW_DATA_DIR = settings.DATA_DIR
+NEW_DATA_DIR = settings.RESIZED_DATA_PATH
+CUR_DIR = os.getcwd()
+print(CUR_DIR)
 
 blacklist = ['Type_2/2845.jpg', 'Type_2/5892.jpg', 'Type_1/5893.jpg',
     'Type_1/1339.jpg', 'Type_1/3068.jpg', 'Type_2/7.jpg',
@@ -76,6 +78,16 @@ def create_validation_data():
         fn = files[i]
         shutil.move(train_dir+'/'+fn, val_dir+'/'+fn)
 
+def create_val_data_from_list():
+    train_dir = NEW_DATA_DIR+'/train'
+    val_dir = NEW_DATA_DIR+'/valid'
+    print(CUR_DIR)
+    with open(os.path.join(CUR_DIR, 'validlist.txt')) as f:
+        for fn in f:
+            fn = fn.strip('\n')
+            print(fn)
+            shutil.move(train_dir+'/'+fn, val_dir+'/'+fn)
+
 def move_back_validation_data():
     train_dir = NEW_DATA_DIR+'/train'
     val_dir = NEW_DATA_DIR+'/valid'
@@ -105,6 +117,12 @@ if __name__ == "__main__":
             move_back_validation_data()
         except:
             pass
-        create_validation_data()
+        try:
+            create_val_data_from_list()
+            print('create validation data from list success')
+        except:
+            print('failed to create validation data from list, creating random validation data')
+            move_back_validation_data()
+            create_validation_data()
         print('done')
 

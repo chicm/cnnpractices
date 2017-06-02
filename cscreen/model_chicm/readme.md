@@ -23,11 +23,14 @@ chicm@chicm-ubuntu:~/ml/kgdata/input/additional$ ls
 Type_1  Type_2  Type_3
 ```
 2. Open settings.py, change the value of TRAIN_DATA_PATH to the absolute path of your TRAIN_DATA_PATH, without a slash '/' at the end.
-3. Run ./step1_preprocess_images.sh, This step normally take around half an hour on my computer.
+
+3. Enter the directory where the step1_preprocess_images.sh is located, Run ./step1_preprocess_images.sh, This step normally take around half an hour on my computer.
 ```
 ./step1_preprocess_images.sh
 ```
-4. Run ./step2_train_models.sh, This step may take 15 - 20 hours  on my GTX1080ti GPU.
+Please note, the above script must be executed from the directory where it is located. 
+
+4. Run ./step2_train_models.sh, This step normally take around 20 hours on my GTX1080ti GPU.
 ```
 ./step2_train_models.sh
 ```
