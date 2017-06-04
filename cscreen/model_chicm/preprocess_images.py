@@ -4,7 +4,7 @@ import numpy as np
 
 NEW_DATA_DIR = settings.RESIZED_DATA_PATH
 CUR_DIR = os.getcwd()
-print(CUR_DIR)
+print('CUR DIR:' + CUR_DIR)
 
 blacklist = ['Type_2/2845.jpg', 'Type_2/5892.jpg', 'Type_1/5893.jpg',
     'Type_1/1339.jpg', 'Type_1/3068.jpg', 'Type_2/7.jpg',
@@ -98,8 +98,25 @@ def move_back_validation_data():
     for fn in files:
         shutil.move(val_dir+'/'+fn, train_dir+'/'+fn)
 
+def check():
+    if not os.path.exists(settings.TRAIN_DATA_PATH):
+        print('{} not found, please configure settings.TRAIN_DATA_PATH correctly'.format(settings.TRAIN_DATA_PATH))
+        return False
+    if not os.path.exists(settings.TRAIN_DATA_PATH+'/train'):
+        print('{} not found, please configure settings.TRAIN_DATA_PATH correctly'.format(settings.TRAIN_DATA_PATH+'/train'))
+        return False
+    if not os.path.exists(settings.TRAIN_DATA_PATH+'/test'):
+        print('{} not found, please configure settings.TRAIN_DATA_PATH correctly'.format(settings.TRAIN_DATA_PATH+'/test'))
+        return False
+    if not os.path.exists(settings.TRAIN_DATA_PATH+'/additional'):
+        print('{} not found, please configure settings.TRAIN_DATA_PATH correctly'.format(settings.TRAIN_DATA_PATH+'/additional'))
+        return False
+    return True
 
 if __name__ == "__main__":
+    if not check():
+        exit()
+
     if True:
         print('creating directories')
         create_directories()

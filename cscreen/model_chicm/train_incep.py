@@ -19,7 +19,7 @@ import pandas as pd
 import random
 from PIL import Image
 
-from utils import save_array, load_array
+from utils import save_array, load_array, load_best_weights, save_weights, w_files_training
 from utils import create_inceptionv3
 
 data_dir = settings.RESIZED_DATA_PATH
@@ -57,78 +57,35 @@ dset_sizes = {x: len(dsets[x]) for x in ['train', 'valid']}
 dset_classes = dsets['train'].classes
 save_array(CLASSES_FILE, dset_classes)
 
-w_files_training = []
-
-def save_weights(acc, model, epoch, max_num=2):
-    f_name = '{}_{}_{:.5f}_.pth'.format(model.name, epoch, acc)
-    w_file_path = os.path.join(MODEL_DIR, f_name)
-    if len(w_files_training) < max_num:
-        w_files_training.append((acc, w_file_path))
-        torch.save(model.state_dict(), w_file_path)
-        return
-    min = 10.0
-    index_min = -1
-    for i, item in enumerate(w_files_training):
-        val_acc, fp = item
-        if min > val_acc:
-            index_min = i
-            min = val_acc
-    #print(min)
-    if acc > min:
-        torch.save(model.state_dict(), w_file_path)
-        os.remove(w_files_training[index_min][1])
-        w_files_training[index_min] = (acc, w_file_path)
-
-def train_model(model, criterion, optimizer, w_file, lr_scheduler, max_num = 2, init_lr=0.001, num_epochs=25):
+def train_model(model, criterion, optimizer, lr_scheduler, max_num = 2, init_lr=0.001, num_epochs=100):
     since = time.time()
-
     best_model = model
     best_acc = 0.0
-    loader = dset_loaders
     print(model.name)
-    
     for epoch in range(num_epochs):
         epoch_since = time.time()
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
         print('-' * 10)
-        
-        # Each epoch has a training and validation phase
         for phase in ['train', 'valid']:
             if phase == 'train':
                 optimizer = lr_scheduler(optimizer, epoch, init_lr=init_lr)
-                model.train(True)  # Set model to training mode
+                model.train(True) 
             else:
-                model.train(False)  # Set model to evaluate mode
-
+                model.train(False)
             running_loss = 0.0
             running_corrects = 0
-
-            # Iterate over data.
             for data in dset_loaders[phase]:
-                # get the inputs
                 inputs, labels = data
-                #print(labels)
-
-                # wrap them in Variable
                 inputs, labels = Variable(inputs.cuda()), Variable(labels.cuda())
-                
-                # zero the parameter gradients
                 optimizer.zero_grad()
-
-                # forward
                 outputs = model(inputs)
                 _, preds = torch.max(outputs.data, 1)
                 loss = criterion(outputs, labels)
-
-                # backward + optimize only if in training phase
                 if phase == 'train':
                     loss.backward()
                     optimizer.step()
-
-                # statistics
                 running_loss += loss.data[0]
                 running_corrects += torch.sum(preds == labels.data)
-
             epoch_loss = running_loss / dset_sizes[phase]
             epoch_acc = running_corrects / dset_sizes[phase]
 
@@ -141,9 +98,7 @@ def train_model(model, criterion, optimizer, w_file, lr_scheduler, max_num = 2, 
                 best_acc = epoch_acc
                 #best_model = copy.deepcopy(model)
                 #torch.save(best_model.state_dict(), w_file)
-
         print('epoch {}: {:.0f}s'.format(epoch, time.time()-epoch_since))
-
     time_elapsed = time.time() - since
     print('Training complete in {:.0f}m {:.0f}s'.format(
         time_elapsed // 60, time_elapsed % 60))
@@ -167,24 +122,23 @@ def cyc_lr_scheduler(optimizer, epoch, init_lr=0.001, lr_decay_epoch=7):
     
     return optimizer    
 
-def train(model, w_file, init_lr = 0.001, num_epochs = epochs, max_num = 2):
+def train(model, init_lr = 0.001, num_epochs = epochs, max_num = 2):
     criterion = nn.CrossEntropyLoss()
     # Observe that all parameters are being optimized
     optimizer_ft = optim.SGD(model.parameters(), lr=init_lr, momentum=0.9)
 
-    model = train_model(model, criterion, optimizer_ft, w_file, cyc_lr_scheduler, init_lr=init_lr, 
+    model = train_model(model, criterion, optimizer_ft, cyc_lr_scheduler, init_lr=init_lr, 
                         num_epochs=num_epochs, max_num = max_num)
     return model
 
 def train_inception_v3():
     print('training inception_v3')
-    model, w_file = create_inceptionv3()
+    model = create_inceptionv3()
     try:
-        model.load_state_dict(torch.load(w_file))
+        load_best_weights(model)
     except:
-        print('{} not found, continue'.format(w_file))
-        pass
-    train(model, w_file)
+        print('Failed to load weigths')
+    train(model)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--train", nargs=1, help="train model")

@@ -2,11 +2,12 @@
 This model was developed on following software and hardware platform:
 + GTX 1080ti GPU with 11GB GPU Memory
 + Ubuntu 16.04
++ CUDA 8.0
++ cuDNN 5.1
 + Anaconda 3 and Python 3.6 with following packages:
-  - cv2
-  - pytorch
-  - torchvision
-  - bcolz
+  - cv2 (conda install opencv)
+  - pytorch,torchvision (conda install pytorch torchvision cuda80 -c soumith)
+  - bcolz (conda install bcolz)
 
 This model has not been tested on other GPU or OS.
 
