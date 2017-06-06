@@ -3,6 +3,8 @@ import os, shutil, glob, sys, cv2
 import numpy as np
 
 NEW_DATA_DIR = settings.RESIZED_DATA_PATH
+TEST_DIR = settings.STATGE1_TEST_DATA_PATH
+
 CUR_DIR = os.getcwd()
 print('CUR DIR:' + CUR_DIR)
 
@@ -22,10 +24,10 @@ def create_directories():
     try_mkdir(NEW_DATA_DIR+'/valid/Type_1')
     try_mkdir(NEW_DATA_DIR+'/valid/Type_2')
     try_mkdir(NEW_DATA_DIR+'/valid/Type_3')
-    try_mkdir(NEW_DATA_DIR+'/test')
-    try_mkdir(NEW_DATA_DIR+'/test/unknown')
+    try_mkdir(TEST_DIR)
+    #try_mkdir(NEW_DATA_DIR+'/test/unknown')
     try_mkdir(NEW_DATA_DIR+'/results')
-    try_mkdir(NEW_DATA_DIR+'/models')
+    try_mkdir(settings.MODEL_PATH)
 
 def try_mkdir(path):
     try:
@@ -56,9 +58,9 @@ def resize_640(src_dir, tgt_dir, match_str):
 
 
 def resize_images():
-    resize_640(settings.TRAIN_DATA_PATH+'/train', NEW_DATA_DIR+'/train', '*/*.jpg')
-    resize_640(settings.TRAIN_DATA_PATH+'/additional', NEW_DATA_DIR+'/train', '*/*.jpg')
-    resize_640(settings.TRAIN_DATA_PATH+'/test', NEW_DATA_DIR+'/test/unknown', '*.jpg')
+    resize_640(settings.INPUT_PATH+'/train', NEW_DATA_DIR+'/train', '*/*.jpg')
+    resize_640(settings.INPUT_PATH+'/additional', NEW_DATA_DIR+'/train', '*/*.jpg')
+    resize_640(settings.INPUT_PATH+'/test', NEW_DATA_DIR+'/test/unknown', '*.jpg')
 
 def update_label_0522():
     train_dir = NEW_DATA_DIR+'/train'
@@ -99,17 +101,17 @@ def move_back_validation_data():
         shutil.move(val_dir+'/'+fn, train_dir+'/'+fn)
 
 def check():
-    if not os.path.exists(settings.TRAIN_DATA_PATH):
-        print('{} not found, please configure settings.TRAIN_DATA_PATH correctly'.format(settings.TRAIN_DATA_PATH))
+    if not os.path.exists(settings.INPUT_PATH):
+        print('{} not found, please configure settings.INPUT_PATH correctly'.format(settings.INPUT_PATH))
         return False
-    if not os.path.exists(settings.TRAIN_DATA_PATH+'/train'):
-        print('{} not found, please configure settings.TRAIN_DATA_PATH correctly'.format(settings.TRAIN_DATA_PATH+'/train'))
+    if not os.path.exists(settings.INPUT_PATH+'/train'):
+        print('{} not found, please configure settings.INPUT_PATH correctly'.format(settings.INPUT_PATH+'/train'))
         return False
-    if not os.path.exists(settings.TRAIN_DATA_PATH+'/test'):
-        print('{} not found, please configure settings.TRAIN_DATA_PATH correctly'.format(settings.TRAIN_DATA_PATH+'/test'))
+    if not os.path.exists(settings.INPUT_PATH+'/test'):
+        print('{} not found, please configure settings.INPUT_PATH correctly'.format(settings.INPUT_PATH+'/test'))
         return False
-    if not os.path.exists(settings.TRAIN_DATA_PATH+'/additional'):
-        print('{} not found, please configure settings.TRAIN_DATA_PATH correctly'.format(settings.TRAIN_DATA_PATH+'/additional'))
+    if not os.path.exists(settings.INPUT_PATH+'/additional'):
+        print('{} not found, please configure settings.INPUT_PATH correctly'.format(settings.INPUT_PATH+'/additional'))
         return False
     return True
 

@@ -95,28 +95,40 @@ def make_preds(net, test_loader):
 def ensemble():
     preds_raw = []
     os.chdir(MODEL_DIR)
+    total_weight = 0
+    preds_w = None
     for match_str in w_file_matcher:
         w_files = glob.glob(match_str)
         for w_file in w_files:
+            weight = 0
             full_w_file = MODEL_DIR + '/' + w_file
             if w_file.startswith('dense161'):
                 model, _ = create_dense161()
+                weight = 1
             elif w_file.startswith('dense169'):
                 model, _ = create_dense169()
+                weight = 0.8
             elif w_file.startswith('dense201'):
                 model, _ = create_dense201()
+                weight = 1
             elif w_file.startswith('res50'):
                 model,_ = create_res50()
+                weight = 0.9
             elif w_file.startswith('res101'):
                 model,_ = create_res101()
+                weight = 0.9
             elif w_file.startswith('res152'):
                 model,_ = create_res152()
+                weight = 0.9
             elif w_file.startswith('vgg16'):
                 model,_ = create_vgg16()
+                weight = 0.2
             elif w_file.startswith('vgg19'):
                 model,_ = create_vgg19()
+                weight = 0.7
             elif w_file.startswith('inceptionv3'):
                 model,_ = create_inceptionv3()
+                weight = 0.8
             else:
                 pass
             model.load_state_dict(torch.load(full_w_file))
@@ -126,14 +138,41 @@ def ensemble():
             pred = np.array(pred)
             preds_raw.append(pred)
 
+            if preds_w is None:
+                preds_w = np.zeros((pred.shape))
+            preds_w += pred * weight
+            total_weight += weight
+
             del model
             
     save_array(PRED_FILE_RAW, preds_raw)
     preds = np.mean(preds_raw, axis=0)
+    #preds = preds_w / total_weight
+    
     save_array(PRED_FILE, preds)
 
 def do_clip(arr, mx): 
     return np.clip(arr, (1-mx)/2, mx)
+
+def up_clip(arr, mx, lw):
+    for i, row in enumerate(arr):
+        max_index = -1
+        max_value = -1
+        for j in range(len(arr[i])):
+            if arr[i][j] > max_value:
+                max_value = arr[i][j]
+                max_index = j
+        #print(max_value, max_index)
+        if max_value >= lw:
+            arr[i][max_index] = mx
+            left = max_index - 1
+            if left < 0:
+                left = len(arr[i]) - 1
+            right = max_index + 1
+            if right >= len(arr[i]):
+                right = 0
+            arr[i][left]  = (1-mx) / 2
+            arr[i][right] = (1-mx) / 2
 
 def submit(filename, clip):
     filenames = [f.split('/')[-1] for f, i in dsets.imgs]
@@ -143,6 +182,8 @@ def submit(filename, clip):
         subm = np.array(preds)
     else:
         subm = do_clip(preds, clip)
+        #up_clip(subm, clip, 0.8)
+        #print(subm[:10])
     subm_name = RESULT_DIR+'/'+filename  
     submission = pd.DataFrame(subm, columns=dset_classes)
     submission.insert(0, 'image_name', filenames)

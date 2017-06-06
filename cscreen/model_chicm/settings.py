@@ -1,17 +1,20 @@
-# Configure the TRAIN_DATA_PATH to the directory which contains 'test', 'train' and 'additional'
-# The addiontal training data should be put into TRAIN_DATA_PATH/additional/Type_1,
-# TRAIN_DATA_PATH/additional/Type_2, and TRAIN_DATA_PATH/additional/Type_3
+# Configure the INPUT_PATH to the directory which contains 'test', 'train' and 'additional'
+# The addiontal training data should be put into INPUT_PATH/additional/Type_1,
+# INPUT_PATH/additional/Type_2, and INPUT_PATH/additional/Type_3
 # Please do NOT include slash('/') at the end of any following paths.
-TRAIN_DATA_PATH = '/home/chicm/ml/kgdata/cscreen'
+INPUT_PATH = '/home/chicm/ml/kgdata/cscreen'
 
-# Normally you do not need to change this value
-RESIZED_DATA_PATH = TRAIN_DATA_PATH + '/resize640'
+# This directory is created automatically, normally you do not need to change this path
+RESIZED_DATA_PATH = INPUT_PATH + '/resize640'
 
-# TEST_DATA_PATH is preconfigured to predict the stage 1 test data. If you want to predict stage 1
-# test data, you do not need to change it.
-# Config this TEST_DATA_PATH when you want to predict new test data, make sure there is an "unknown"
-# directory under this TEST_DATA_PATH and jpg files should be put into TEST_DATA_PATH/unknown
-TEST_DATA_PATH = RESIZED_DATA_PATH + '/test'
+# This directory is create automatically, you do not need to change it.
+STATGE1_TEST_DATA_PATH = RESIZED_DATA_PATH + '/test'
 
-# Normally you do not need to change this value
+# This directory is create automatically, you do not need to change it.
 MODEL_PATH = RESIZED_DATA_PATH + '/models'
+
+# Set STATGE1_LABELED_TEST_DATA_PATH to the labled stage1 test data
+#STATGE1_LABELED_TEST_DATA_PATH = 
+
+# Before predicting stage2 test data, uncomment this and set it to the directory contains stage 2 test pictures.
+#STATGE2_TEST_DATA_PATH = INPUT_PATH + '/test2'

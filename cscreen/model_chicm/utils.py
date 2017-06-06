@@ -45,9 +45,9 @@ def load_best_weights(model):
             w_files_training.append((acc, w_file))
         except:
             continue
-    if max_acc > 0:
-        print('loading weight: {}'.format(best_file))
-        model.load_state_dict(torch.load(best_file))
+    #if max_acc > 0:
+    #    print('loading weight: {}'.format(best_file))
+    #    model.load_state_dict(torch.load(best_file))
 
 def save_weights(acc, model, epoch, max_num=2):
     f_name = '{}_{}_{:.5f}_.pth'.format(model.name, epoch, acc)
@@ -147,6 +147,7 @@ def create_dense201(load_weights=False):
 
 def create_vgg19bn(load_weights=False):
     vgg19_bn_ft = vgg19_bn(pretrained=True)
+    #vgg19_bn_ft.classifier = nn.Linear(25088, 3)
     vgg19_bn_ft.classifier = nn.Sequential(
             nn.Linear(512 * 7 * 7, 4096),
             nn.ReLU(True),
@@ -163,6 +164,7 @@ def create_vgg19bn(load_weights=False):
 
 def create_vgg16bn(load_weights=False):
     vgg16_bn_ft = vgg16_bn(pretrained=True)
+    #vgg16_bn_ft.classifier = nn.Linear(25088, 3)
     vgg16_bn_ft.classifier = nn.Sequential(
             nn.Linear(512 * 7 * 7, 4096),
             nn.ReLU(True),

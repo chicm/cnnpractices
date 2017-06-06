@@ -21,9 +21,9 @@ from utils import save_array, load_array, get_acc_from_w_filename
 from utils import create_dense161, create_dense201, create_res101, create_res152, create_dense121
 from utils import create_dense169, create_res50, create_inceptionv3
 from utils import create_vgg16, create_vgg19, create_vgg16bn, create_vgg19bn
+from cscreendataset import get_stage1_test_loader, get_stage2_test_loader
 
 data_dir = settings.RESIZED_DATA_PATH
-test_dir = settings.TEST_DATA_PATH
 MODEL_DIR = settings.MODEL_PATH
 
 RESULT_DIR = data_dir + '/results'
@@ -32,60 +32,33 @@ PRED_FILE_WEIGHTED = RESULT_DIR + '/pred_ens_weighted.dat'
 PRED_FILE_RAW = RESULT_DIR + '/pred_ens_raw.dat'
 PRED_FILE_RAW_WEIGHTED = RESULT_DIR + '/pred_raw_weighted.dat'
 CLASSES_FILE = RESULT_DIR + '/train_classes.dat'
+TEST_FILE_NAMES = RESULT_DIR + '/filenames.dat'
 batch_size = 16
 
 w_file_matcher = ['dense161*pth', 'dense201*pth','dense169*pth','dense121*pth','inceptionv3*pth',
     'res50*pth','res101*pth', 'res152*pth', 'vgg16*pth', 'vgg19*pth']
 
-data_transforms = {
-    'test': transforms.Compose([
-        transforms.Scale(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ]),
-    'testv3': transforms.Compose([
-        transforms.Scale(320),
-        transforms.CenterCrop(299),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ])
-}
-
-dsets = datasets.ImageFolder(test_dir, data_transforms['test'])
-dsets.imgs = sorted(dsets.imgs)
-
-dsetsv3 = datasets.ImageFolder(test_dir, data_transforms['testv3'])
-dsetsv3.imgs = sorted(dsetsv3.imgs)
-
-print(dsets.imgs[:5])
-print(dsetsv3.imgs[:5])
          
 dset_classes = load_array(CLASSES_FILE)
 print(dset_classes)
 
-test_loader = torch.utils.data.DataLoader(dsets, batch_size=batch_size,
-                                               shuffle=False, num_workers=4)
-
-test_v3_loader = torch.utils.data.DataLoader(dsetsv3, batch_size=batch_size,
-                                               shuffle=False, num_workers=4)
-
-use_gpu = torch.cuda.is_available()
-
-def make_preds(net, test_loader):
-    loader = test_loader
-    if hasattr(net, 'name') and net.name == 'inceptionv3':
-        print('making prediction with inceptioinv3')
-        loader = test_v3_loader
+def make_preds(net, stage):
+    if stage == 'stage1':
+        loader = get_stage1_test_loader(net.name)
+    elif stage == 'stage2':
+        loader = get_stage2_test_loader(net.name)
+    else:
+        print('Wrong stage name:{}'.format(stage))
+        exit()
     preds = []
     m = nn.Softmax()
-    for i, (img, indices) in enumerate(loader, 0):
+    for i, (img, _) in enumerate(loader, 0):
         inputs = Variable(img.cuda())
         outputs = net(inputs)
         pred = m(outputs).data.cpu().tolist()
         for p in pred:
             preds.append(p)
-    return preds
+    return preds, loader.filenames
 
 def get_weight(acc):
     if acc < 0.78:
@@ -106,17 +79,24 @@ def get_weight(acc):
         return 0.9
     elif acc < 0.87:
         return 1.0
-    elif acc > 0.87:
+    elif acc < 0.88:
+        return 1.1
+    elif acc < 0.89:
         return 1.2
+    elif acc >= 0.89:
+        return 1.3
 
-def ensemble():
+def ensemble(stage):
     preds_weighted = None
     total_weight = 0
     preds_raw = []
     preds_raw_weighted = []
-    os.chdir(MODEL_DIR)
+    
     for match_str in w_file_matcher:
+        #print(match_str)
+        os.chdir(MODEL_DIR)
         w_files = glob.glob(match_str)
+        #print('cur:' + os.getcwd())
         for w_file in w_files:
             full_w_file = MODEL_DIR + '/' + w_file
             print(full_w_file)
@@ -147,7 +127,7 @@ def ensemble():
                 continue
             model.load_state_dict(torch.load(full_w_file))
 
-            pred = make_preds(model, test_loader)
+            pred, filenames = make_preds(model, stage)
             pred = np.array(pred)
             preds_raw.append(pred)
             weight = get_weight(get_acc_from_w_filename(full_w_file))
@@ -167,12 +147,15 @@ def ensemble():
     preds = np.mean(preds_raw, axis=0)
     save_array(PRED_FILE, preds)
     save_array(PRED_FILE_WEIGHTED, preds_weighted)
+    save_array(TEST_FILE_NAMES, filenames)
 
 def do_clip(arr, mx): 
     return np.clip(arr, (1-mx)/2, mx)
 
 def submit(filename, clip, use_weight=False):
-    filenames = [f.split('/')[-1] for f, i in dsets.imgs]
+    #filenames = [f.split('/')[-1] for f, i in dsets.imgs]
+    #filenames = get_stage1_test_loader('res50').filenames
+    filenames = load_array(TEST_FILE_NAMES)
     if use_weight:
         preds = load_array(PRED_FILE_WEIGHTED)
     else:
@@ -188,12 +171,12 @@ def submit(filename, clip, use_weight=False):
     submission.to_csv(subm_name, index=False)
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--ens", action='store_true', help="ensemble predict")
+parser.add_argument("--ens", nargs=1, help="ensemble predict")
 parser.add_argument("--sub", nargs=2, help="generate submission file")
 
 args = parser.parse_args()
 if args.ens:
-    ensemble()
+    ensemble(args.ens[0])
     print('done')
 if args.sub:
     print('generating submision file...')
