@@ -60,7 +60,7 @@ def resize_640(src_dir, tgt_dir, match_str):
 def resize_images():
     resize_640(settings.INPUT_PATH+'/train', NEW_DATA_DIR+'/train', '*/*.jpg')
     resize_640(settings.INPUT_PATH+'/additional', NEW_DATA_DIR+'/train', '*/*.jpg')
-    resize_640(settings.INPUT_PATH+'/test', NEW_DATA_DIR+'/test/unknown', '*.jpg')
+    resize_640(settings.INPUT_PATH+'/test', TEST_DIR, '*.jpg')
 
 def update_label_0522():
     train_dir = NEW_DATA_DIR+'/train'
